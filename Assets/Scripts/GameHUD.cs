@@ -1,122 +1,136 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
+[DefaultExecutionOrder(-100)]
 public class GameHUD : MonoBehaviour
 {
     private const string CanvasObjectName = "BasketballHUDCanvas";
+    private const string BestScoreKey = "BasketballRush.BestScore";
+    private const float PauseButtonSize = 64f;
+    private const float PauseButtonGap = 14f;
+    private const float CountdownDuration = 3.6f;
+    private const float CountdownGoDuration = 0.6f;
+    private const float PanelWidth = 260f;
+    private const float PanelHeight = 76f;
+    private const float MarginX = 40f;
+    private const float MarginY = 26f;
 
     private static GameHUD instance;
     private static GameObject createdCanvas;
+    private static Font sharedFont;
+    private static Sprite panelSprite;
+    private static Sprite borderSprite;
+
+    public static GameHUD Instance => instance;
+
+    public int BestScoreValue => bestScore;
+
+    public int DisplayedTimeSeconds => displayedTime;
+
+    public bool HasGameStarted => gameStarted;
+
+    public bool IsCountdownActive => countdownActive;
+
+    public bool IsTimerFinished => timerFinished;
 
     [Header("References")]
-    [Tooltip("The existing scoring system. If empty, it is found automatically.")]
     public HoopScoreSystem hoopScore;
-
-    [Tooltip("The ball controller used to block throws after time runs out. If empty, it is found automatically.")]
     public BallThrowController ballThrowController;
 
     [Header("Timer")]
-    [Tooltip("Seconds shown at the start of the game.")]
     public int startingTime = 60;
 
     [Header("Appearance")]
-    [Tooltip("Optional font override. If empty, the bundled HUD font is used.")]
     public Font hudFont;
-
     public Color textColor = Color.white;
     public int fontSize = 34;
     public int timeUpFontSize = 72;
 
     [Header("Audio")]
-    [Tooltip("Basket score sound. Loaded from Resources/Audio/Score if empty.")]
     public AudioClip scoreClip;
-
-    [Tooltip("Time-up sound. Loaded from Resources/Audio/TimeUp if empty.")]
     public AudioClip timeUpClip;
-
     [Range(0f, 1f)] public float gameAudioVolume = 0.85f;
-
-    private static Font sharedFont;
 
     private Text scoreText;
     private Text timerText;
-    private Text timeUpText;
+    private Text streakText;
+    private Text powerPercentText;
+    private Text popupText;
+    private Text countdownText;
+    private Text startTitleText;
+    private Text startSubtitleText;
+    private Text startBestText;
+    private Text startButtonLabel;
+    private Text gameOverTitleText;
+    private Text gameOverScoreText;
+    private Text gameOverBestText;
+    private Text gameOverHintText;
+    private Text pauseTitleText;
+    private Text pauseHintText;
+    private Text resumeButtonLabel;
+
+    private RectTransform scorePanelRect;
+    private RectTransform timerPanelRect;
+    private RectTransform popupRect;
+    private RectTransform startButtonRect;
+    private RectTransform resumeButtonRect;
+    private RectTransform pauseButtonRect;
+    private RectTransform powerFillRect;
+
+    private Image startButtonImage;
+    private Image resumeButtonImage;
+    private Image pauseButtonImage;
+    private Image powerFillImage;
+
+    private GameObject scorePanel;
+    private GameObject timerPanel;
+    private GameObject powerPanel;
+    private GameObject startPanel;
+    private GameObject gameOverPanel;
+    private GameObject pausePanel;
+    private GameObject pauseButton;
+
     private AudioSource gameAudioSource;
+    private AudioClip countdownBeepClip;
+    private AudioClip countdownGoClip;
+
     private float timeRemaining;
     private int displayedTime;
     private int lastScore;
+    private int bestScore;
+    private int bestAtGameStart;
+    private int displayedStreak = -1;
     private bool timerFinished;
-    private int pendingTextRefreshes = 2;
-
-    private Text scorePopText;
-    private RectTransform scoreRect;
-    private Vector3 scoreBaseScale = Vector3.one;
-    private float scorePulseTimer;
-    private float scorePopTimer;
-
-    private const float ScorePulseDuration = 0.18f;
-    private const float ScorePulseScale = 1.12f;
-    private const float ScorePopDuration = 0.9f;
-    private const float ScorePopFadeDuration = 0.3f;
-    private static readonly Color ScorePopColor = new Color(1f, 0.82f, 0.25f, 1f);
-
-    private const float HudPanelWidth = 248f;
-    private const float HudPanelHeight = 76f;
-    private const float HudPanelMarginX = 40f;
-    private const float HudPanelMarginY = 26f;
-    private const float HudIconSize = 42f;
-    private const float HudIconLeftPadding = 15f;
-    private const float HudIconTextGap = 10f;
-    private const float HudTextRightPadding = 16f;
-    private const float PowerPanelWidth = 420f;
-    private const float PowerPanelHeight = 80f;
-    private const float PowerPanelMarginBottom = 32f;
-    private const float PowerBarWidth = 360f;
-    private const float PowerBarHeight = 16f;
-    private const float PowerBarFillHeight = 10f;
-    private const float PowerBarInset = 3f;
-    private const int PowerLabelFontSize = 22;
-    private const int PowerPercentFontSize = 18;
-    private static readonly Color HudPanelColor = new Color(0.055f, 0.06f, 0.07f, 0.86f);
-    private static readonly Color HudPanelBorderColor = new Color(1f, 1f, 1f, 0.16f);
-    private static readonly Color HudPanelShadowColor = new Color(0f, 0f, 0f, 0.4f);
-    private static readonly Color PowerTrackColor = new Color(0.015f, 0.018f, 0.022f, 0.92f);
-    private static readonly Color PowerFillColor = new Color(1f, 0.52f, 0.1f, 1f);
-    private static readonly Color PowerAccentColor = new Color(1f, 0.62f, 0.23f, 1f);
-
-    private static Sprite hudPanelFillSprite;
-    private static Sprite hudPanelBorderSprite;
-    private static Sprite basketballIconSprite;
-    private static Sprite timerIconSprite;
-    private static Sprite powerBarTrackSprite;
-    private static Sprite powerBarBorderSprite;
-    private static Sprite powerBarFillSprite;
-
-    private GameObject scorePanelObject;
-    private GameObject timerPanelObject;
-    private GameObject powerPanelObject;
-    private RectTransform powerBarFillRect;
-    private Image powerBarFillImage;
-    private Text powerPercentText;
-    private float powerBarFillMaxWidth;
-    private int displayedPowerPercent = -1;
-
-    private GameObject startPanel;
-    private Image startButtonImage;
-    private RectTransform startButtonRect;
-    private Text startTitleText;
-    private Text startSubtitleText;
-    private Text startButtonText;
-    private GameObject gameOverPanel;
-    private Text gameOverScoreText;
-    private Text gameOverHintText;
     private bool gameStarted;
+    private bool isPaused;
+    private bool countdownActive;
+    private float countdownRemaining;
+    private int lastCountdownDisplay = int.MinValue;
+    private float countdownPulseTimer;
+    private bool bestBeatenThisGame;
 
-    private static readonly Color StartButtonNormalColor = new Color(1f, 0.45f, 0.12f, 1f);
-    private static readonly Color StartButtonHoverColor = new Color(1f, 0.57f, 0.22f, 1f);
-    private static readonly Color StartButtonPressedColor = new Color(0.86f, 0.33f, 0.06f, 1f);
+    private Vector2 popupBasePosition;
+    private float popupTimer;
+    private Color popupColor;
+    private float popupFontSize;
+
+    private bool pausePointerWasHeld;
+
+    private static readonly Color PanelColor = new Color(0.055f, 0.06f, 0.07f, 0.88f);
+    private static readonly Color BorderColor = new Color(1f, 1f, 1f, 0.16f);
+    private static readonly Color AccentColor = new Color(1f, 0.55f, 0.14f, 1f);
+    private static readonly Color ScorePopColor = new Color(1f, 0.82f, 0.25f, 1f);
+    private static readonly Color SwishColor = new Color(0.35f, 1f, 0.55f, 1f);
+    private static readonly Color MissColor = new Color(0.9f, 0.4f, 0.32f, 1f);
+    private static readonly Color StartButtonColor = new Color(1f, 0.45f, 0.12f, 1f);
+    private static readonly Color StartButtonHover = new Color(1f, 0.57f, 0.22f, 1f);
+    private static readonly Color StartButtonPressed = new Color(0.86f, 0.33f, 0.06f, 1f);
+    private static readonly Color ResumeButtonColor = new Color(0.18f, 0.62f, 0.34f, 1f);
+    private static readonly Color ResumeButtonHover = new Color(0.25f, 0.73f, 0.42f, 1f);
+    private static readonly Color ResumeButtonPressed = new Color(0.1f, 0.5f, 0.25f, 1f);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void RegisterSceneLoadHandler()
@@ -133,17 +147,12 @@ public class GameHUD : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void EnsureHudExists()
     {
-        if (instance != null)
+        if (instance != null || GameObject.Find(CanvasObjectName) != null)
         {
             return;
         }
 
-        if (GameObject.Find(CanvasObjectName) != null)
-        {
-            return;
-        }
-
-        if (FindObjectsByType<GameHUD>(FindObjectsInactive.Include).Length > 0)
+        if (FindAnyObjectByType<GameHUD>(FindObjectsInactive.Include) != null)
         {
             return;
         }
@@ -162,6 +171,7 @@ public class GameHUD : MonoBehaviour
         }
 
         instance = this;
+        PerformanceTuning.ApplyMenu();
 
         if (hoopScore == null)
         {
@@ -173,6 +183,13 @@ public class GameHUD : MonoBehaviour
             ballThrowController = FindAnyObjectByType<BallThrowController>();
         }
 
+        if (hoopScore != null)
+        {
+            hoopScore.BasketScored += HandleBasketScored;
+            hoopScore.ShotMissed += HandleShotMissed;
+        }
+
+        bestScore = PlayerPrefs.GetInt(BestScoreKey, 0);
         SetupAudio();
         BuildHud();
     }
@@ -185,6 +202,14 @@ public class GameHUD : MonoBehaviour
         }
 
         instance = null;
+        Time.timeScale = 1f;
+        AudioListener.pause = false;
+
+        if (hoopScore != null)
+        {
+            hoopScore.BasketScored -= HandleBasketScored;
+            hoopScore.ShotMissed -= HandleShotMissed;
+        }
 
         if (createdCanvas != null)
         {
@@ -196,6 +221,10 @@ public class GameHUD : MonoBehaviour
     private void Start()
     {
         gameStarted = false;
+        isPaused = false;
+        countdownActive = false;
+        bestAtGameStart = bestScore;
+        bestBeatenThisGame = false;
 
         if (hoopScore != null)
         {
@@ -207,31 +236,23 @@ public class GameHUD : MonoBehaviour
         displayedTime = Mathf.CeilToInt(timeRemaining);
         timerFinished = false;
 
-        if (scoreText != null)
-        {
-            scoreText.text = "Score: 0";
-            scoreText.gameObject.SetActive(false);
-            scoreText.SetAllDirty();
-        }
+        SetPanelsVisible(false);
+        SetPowerVisible(false);
+        SetPauseButtonVisible(false);
+        SetPausePanelVisible(false);
+        SetStartPanelVisible(true);
+        SetGameOverVisible(false);
+        HideCountdown();
+        ResetFeedback();
 
+        if (scoreText != null) scoreText.text = "Score: 0";
         if (timerText != null)
         {
             timerText.text = "Time: " + displayedTime;
-            timerText.gameObject.SetActive(false);
-            timerText.SetAllDirty();
+            timerText.color = textColor;
         }
 
-        SetHudPanelsVisible(false);
-        SetPowerPanelVisible(false);
-        ResetPowerMeter();
-
-        if (timeUpText != null) timeUpText.gameObject.SetActive(false);
-        if (gameOverPanel != null) gameOverPanel.SetActive(false);
-        if (gameOverScoreText != null) gameOverScoreText.gameObject.SetActive(false);
-        if (gameOverHintText != null) gameOverHintText.gameObject.SetActive(false);
-        if (startPanel != null) startPanel.SetActive(true);
-
-        ResetScoreFeedback();
+        UpdateBestLabels();
 
         if (ballThrowController != null)
         {
@@ -239,17 +260,494 @@ public class GameHUD : MonoBehaviour
             ballThrowController.canThrow = false;
         }
 
+        RefreshThrowPermission();
         Canvas.ForceUpdateCanvases();
     }
 
     private void Update()
     {
-        UpdateScoreText();
+        if (isPaused)
+        {
+            HandlePauseInput();
+            HandleRestartKey();
+            return;
+        }
+
+        UpdateCountdown();
         UpdateTimer();
-        UpdateScoreFeedback();
+        UpdateScoreLabel();
         UpdatePowerMeter();
+        UpdateFeedback();
+        UpdateStreakText();
+
         HandleStartInput();
+        HandlePauseInput();
         HandleRestartInput();
+    }
+
+    private void OnApplicationPause(bool pauseStatus)
+    {
+        if (pauseStatus && gameStarted && !timerFinished)
+        {
+            PauseGame();
+        }
+    }
+
+    public void StartGame()
+    {
+        RestartGame();
+    }
+
+    public void RestartGame()
+    {
+        ForceUnpausedState();
+        gameStarted = true;
+        PerformanceTuning.ApplyGameplay();
+
+        if (gameAudioSource != null)
+        {
+            gameAudioSource.Stop();
+        }
+
+        bestAtGameStart = bestScore;
+        bestBeatenThisGame = false;
+        timeRemaining = Mathf.Max(0f, startingTime);
+        displayedTime = Mathf.CeilToInt(timeRemaining);
+        timerFinished = false;
+
+        SetStartPanelVisible(false);
+        SetGameOverVisible(false);
+        SetPausePanelVisible(false);
+        SetPauseButtonVisible(true);
+        SetPanelsVisible(true);
+        SetPowerVisible(true);
+
+        if (timerText != null)
+        {
+            timerText.gameObject.SetActive(true);
+            timerText.text = "Time: " + displayedTime;
+            timerText.color = textColor;
+        }
+
+        if (hoopScore != null)
+        {
+            hoopScore.ResetScore();
+        }
+
+        lastScore = 0;
+
+        if (scoreText != null)
+        {
+            scoreText.gameObject.SetActive(true);
+            scoreText.text = "Score: 0";
+        }
+
+        ResetPowerMeter();
+        UpdateBestLabels();
+        ResetFeedback();
+
+        if (ballThrowController != null)
+        {
+            ballThrowController.RestartBall();
+        }
+
+        StartCountdown();
+        Canvas.ForceUpdateCanvases();
+    }
+
+    private void StartCountdown()
+    {
+        countdownActive = true;
+        countdownRemaining = CountdownDuration;
+        lastCountdownDisplay = int.MinValue;
+        countdownPulseTimer = 0.35f;
+
+        if (countdownText != null)
+        {
+            countdownText.text = "3";
+            countdownText.color = new Color(1f, 0.78f, 0.3f, 1f);
+            countdownText.gameObject.SetActive(true);
+        }
+
+        RefreshThrowPermission();
+    }
+
+    private void UpdateCountdown()
+    {
+        if (!countdownActive)
+        {
+            return;
+        }
+
+        countdownRemaining -= Time.deltaTime;
+
+        int display;
+        if (countdownRemaining > CountdownDuration - 1f)
+        {
+            display = 3;
+        }
+        else if (countdownRemaining > CountdownGoDuration + 1f)
+        {
+            display = 2;
+        }
+        else if (countdownRemaining > CountdownGoDuration)
+        {
+            display = 1;
+        }
+        else
+        {
+            display = 0;
+        }
+
+        if (display != lastCountdownDisplay)
+        {
+            lastCountdownDisplay = display;
+            countdownPulseTimer = 0.35f;
+
+            if (countdownText != null)
+            {
+                countdownText.text = display == 0 ? "GO!" : display.ToString();
+                countdownText.color = display == 0
+                    ? new Color(0.4f, 1f, 0.6f, 1f)
+                    : new Color(1f, 0.78f, 0.3f, 1f);
+            }
+
+            PlaySound(display == 0 ? countdownGoClip : countdownBeepClip, display == 0 ? 0.9f : 0.75f);
+        }
+
+        if (countdownPulseTimer > 0f && countdownText != null)
+        {
+            countdownPulseTimer -= Time.deltaTime;
+            float progress = 1f - Mathf.Clamp01(countdownPulseTimer / 0.35f);
+            countdownText.rectTransform.localScale = Vector3.one * (1f + 0.32f * Mathf.Sin(progress * Mathf.PI));
+        }
+
+        if (countdownRemaining <= 0f)
+        {
+            countdownActive = false;
+            HideCountdown();
+            RefreshThrowPermission();
+        }
+    }
+
+    private void HideCountdown()
+    {
+        countdownActive = false;
+
+        if (countdownText != null)
+        {
+            countdownText.gameObject.SetActive(false);
+            countdownText.rectTransform.localScale = Vector3.one;
+        }
+    }
+
+    private void UpdateTimer()
+    {
+        if (!gameStarted || timerFinished || countdownActive)
+        {
+            return;
+        }
+
+        timeRemaining -= Time.deltaTime;
+
+        if (timeRemaining <= 0f)
+        {
+            timeRemaining = 0f;
+            timerFinished = true;
+
+            if (timerText != null)
+            {
+                timerText.text = "Time: 0";
+                timerText.color = MissColor;
+            }
+
+            ShowGameOver();
+            PlaySound(timeUpClip, 0.9f);
+            SetPauseButtonVisible(false);
+            RefreshThrowPermission();
+            return;
+        }
+
+        int newDisplayed = Mathf.CeilToInt(timeRemaining);
+        if (newDisplayed != displayedTime)
+        {
+            displayedTime = newDisplayed;
+
+            if (timerText != null)
+            {
+                timerText.text = "Time: " + displayedTime;
+                timerText.color = displayedTime <= 10 ? MissColor : textColor;
+            }
+        }
+    }
+
+    private void UpdateScoreLabel()
+    {
+        if (hoopScore == null || scoreText == null)
+        {
+            return;
+        }
+
+        int currentScore = hoopScore.score;
+        if (currentScore == lastScore)
+        {
+            return;
+        }
+
+        if (currentScore > lastScore && currentScore > bestScore)
+        {
+            bestScore = currentScore;
+            bestBeatenThisGame = currentScore > bestAtGameStart;
+            PlayerPrefs.SetInt(BestScoreKey, bestScore);
+            PlayerPrefs.Save();
+            UpdateBestLabels();
+        }
+
+        lastScore = currentScore;
+        scoreText.text = "Score: " + currentScore;
+
+        if (timerFinished && gameOverScoreText != null && gameOverScoreText.gameObject.activeSelf)
+        {
+            gameOverScoreText.text = "Final Score: " + currentScore;
+        }
+    }
+
+    private void UpdateStreakText()
+    {
+        if (streakText == null)
+        {
+            return;
+        }
+
+        int streak = hoopScore != null ? hoopScore.Streak : 0;
+        if (streak == displayedStreak)
+        {
+            return;
+        }
+
+        displayedStreak = streak;
+
+        if (streak >= 2)
+        {
+            streakText.gameObject.SetActive(true);
+            streakText.text = "STREAK x" + streak;
+            streakText.color = streak >= 6
+                ? new Color(1f, 0.32f, 0.18f, 1f)
+                : streak >= 4
+                    ? new Color(1f, 0.52f, 0.14f, 1f)
+                    : new Color(1f, 0.82f, 0.25f, 1f);
+        }
+        else
+        {
+            streakText.gameObject.SetActive(false);
+        }
+    }
+
+    private void HandleBasketScored(int points, bool swish, int streak)
+    {
+        PlaySound(scoreClip, 0.9f);
+        ShowPopup(
+            "+" + Mathf.Max(1, points) + (swish ? " SWISH!" : string.Empty) +
+            (streak >= 3 ? "  x" + streak : string.Empty),
+            swish ? SwishColor : ScorePopColor,
+            fontSize + (swish ? 12 : 8));
+    }
+
+    private void HandleShotMissed()
+    {
+        if (!gameStarted || timerFinished)
+        {
+            return;
+        }
+
+        ShowPopup("MISS", MissColor, fontSize + 4);
+    }
+
+    private void ShowPopup(string message, Color color, float size)
+    {
+        if (popupText == null)
+        {
+            return;
+        }
+
+        popupTimer = 0.9f;
+        popupColor = color;
+        popupFontSize = size;
+        popupText.text = message;
+        popupText.fontSize = Mathf.RoundToInt(size);
+        popupText.color = color;
+        popupText.gameObject.SetActive(true);
+
+        if (popupRect != null)
+        {
+            popupRect.anchoredPosition = popupBasePosition;
+            popupRect.localScale = Vector3.one;
+        }
+    }
+
+    private void UpdateFeedback()
+    {
+        if (popupText == null || popupTimer <= 0f)
+        {
+            return;
+        }
+
+        popupTimer -= Time.deltaTime;
+        float progress = 1f - Mathf.Clamp01(popupTimer / 0.9f);
+
+        if (popupRect != null)
+        {
+            popupRect.anchoredPosition = popupBasePosition + new Vector2(0f, progress * 26f);
+            popupRect.localScale = Vector3.one * (1f + 0.18f * Mathf.Sin(Mathf.Clamp01(progress * 4f) * Mathf.PI));
+        }
+
+        Color color = popupColor;
+        color.a = Mathf.Clamp01(popupTimer / 0.3f);
+        popupText.color = color;
+
+        if (popupTimer <= 0f)
+        {
+            popupText.gameObject.SetActive(false);
+
+            if (popupRect != null)
+            {
+                popupRect.anchoredPosition = popupBasePosition;
+                popupRect.localScale = Vector3.one;
+            }
+        }
+    }
+
+    private void ResetFeedback()
+    {
+        popupTimer = 0f;
+        displayedStreak = -1;
+
+        if (popupText != null)
+        {
+            popupText.gameObject.SetActive(false);
+        }
+
+        if (popupRect != null)
+        {
+            popupRect.anchoredPosition = popupBasePosition;
+            popupRect.localScale = Vector3.one;
+        }
+
+        if (streakText != null)
+        {
+            streakText.gameObject.SetActive(false);
+        }
+    }
+
+    private void UpdateBestLabels()
+    {
+        if (startBestText != null)
+        {
+            startBestText.text = "BEST: " + bestScore;
+        }
+
+        if (gameOverBestText != null)
+        {
+            gameOverBestText.text = (bestBeatenThisGame ? "NEW BEST! " : "BEST: ") + bestScore;
+            gameOverBestText.color = bestBeatenThisGame
+                ? new Color(0.4f, 1f, 0.6f, 1f)
+                : new Color(1f, 0.82f, 0.25f, 1f);
+        }
+    }
+
+    private void ShowGameOver()
+    {
+        SetPowerVisible(false);
+        ResetPowerMeter();
+        SetPanelsVisible(false);
+        SetPauseButtonVisible(false);
+
+        if (gameOverTitleText != null)
+        {
+            gameOverTitleText.text = "TIME UP!";
+        }
+
+        if (gameOverScoreText != null)
+        {
+            gameOverScoreText.text = "Final Score: " + lastScore;
+        }
+
+        UpdateBestLabels();
+        SetGameOverVisible(true);
+        PerformanceTuning.ApplyMenu();
+    }
+
+    private void PauseGame()
+    {
+        if (!gameStarted || timerFinished || isPaused)
+        {
+            return;
+        }
+
+        isPaused = true;
+        Time.timeScale = 0f;
+        AudioListener.pause = true;
+        PerformanceTuning.ApplyPaused();
+
+        if (ballThrowController != null)
+        {
+            ballThrowController.CancelAim();
+        }
+
+        SetPauseButtonVisible(false);
+        SetPausePanelVisible(true);
+        ResetPowerMeter();
+        RefreshThrowPermission();
+    }
+
+    private void ResumeGame()
+    {
+        if (!isPaused)
+        {
+            return;
+        }
+
+        isPaused = false;
+        Time.timeScale = 1f;
+        AudioListener.pause = false;
+        PerformanceTuning.ApplyGameplay();
+        pausePointerWasHeld = false;
+
+        SetPausePanelVisible(false);
+        SetPauseButtonVisible(gameStarted && !timerFinished);
+        RefreshThrowPermission();
+    }
+
+    private void TogglePause()
+    {
+        if (isPaused)
+        {
+            ResumeGame();
+        }
+        else if (gameStarted && !timerFinished)
+        {
+            PauseGame();
+        }
+    }
+
+    private void ForceUnpausedState()
+    {
+        isPaused = false;
+        Time.timeScale = 1f;
+        AudioListener.pause = false;
+        pausePointerWasHeld = false;
+        SetPausePanelVisible(false);
+        SetPauseButtonVisible(false);
+    }
+
+    private void RefreshThrowPermission()
+    {
+        if (ballThrowController == null)
+        {
+            return;
+        }
+
+        ballThrowController.canThrow = gameStarted && !timerFinished && !countdownActive && !isPaused;
     }
 
     private void HandleStartInput()
@@ -259,19 +757,19 @@ public class GameHUD : MonoBehaviour
             return;
         }
 
-        if (!TryReadPointer(out Vector2 pointerPosition, out bool pointerHeld, out bool pointerReleased))
+        if (!TryReadPointer(out Vector2 pointerPosition, out bool held, out bool released))
         {
             return;
         }
 
         bool overButton = RectTransformUtility.RectangleContainsScreenPoint(startButtonRect, pointerPosition, null);
-        bool pressed = overButton && pointerHeld;
+        bool pressed = overButton && held;
 
         if (startButtonImage != null)
         {
             startButtonImage.color = pressed
-                ? StartButtonPressedColor
-                : (overButton ? StartButtonHoverColor : StartButtonNormalColor);
+                ? StartButtonPressed
+                : (overButton ? StartButtonHover : StartButtonColor);
         }
 
         if (startButtonRect != null)
@@ -279,9 +777,118 @@ public class GameHUD : MonoBehaviour
             startButtonRect.localScale = Vector3.one * (pressed ? 0.97f : (overButton ? 1.03f : 1f));
         }
 
-        if (overButton && pointerReleased)
+        if (overButton && released)
         {
             StartGame();
+        }
+    }
+
+    private void HandlePauseInput()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && (keyboard.pKey.wasPressedThisFrame || keyboard.escapeKey.wasPressedThisFrame))
+        {
+            TogglePause();
+            return;
+        }
+
+        if (!TryReadPointer(out Vector2 pointerPosition, out bool held, out bool released))
+        {
+            pausePointerWasHeld = false;
+            return;
+        }
+
+        if (isPaused)
+        {
+            if (resumeButtonRect == null)
+            {
+                return;
+            }
+
+            bool overButton = RectTransformUtility.RectangleContainsScreenPoint(resumeButtonRect, pointerPosition, null);
+
+            if (resumeButtonImage != null)
+            {
+                resumeButtonImage.color = overButton && held
+                    ? ResumeButtonPressed
+                    : (overButton ? ResumeButtonHover : ResumeButtonColor);
+            }
+
+            if (resumeButtonRect != null)
+            {
+                resumeButtonRect.localScale = Vector3.one * (overButton && held ? 0.97f : (overButton ? 1.03f : 1f));
+            }
+
+            if (overButton && released)
+            {
+                ResumeGame();
+            }
+
+            return;
+        }
+
+        if (pauseButton == null || !pauseButton.activeSelf || pauseButtonRect == null)
+        {
+            pausePointerWasHeld = false;
+            return;
+        }
+
+        bool overPause = RectTransformUtility.RectangleContainsScreenPoint(pauseButtonRect, pointerPosition, null);
+
+        if (pauseButtonImage != null)
+        {
+            pauseButtonImage.color = overPause
+                ? new Color(0.16f, 0.17f, 0.2f, 0.95f)
+                : PanelColor;
+        }
+
+        if (overPause && held && !pausePointerWasHeld)
+        {
+            pausePointerWasHeld = true;
+            PauseGame();
+            return;
+        }
+
+        if (!held)
+        {
+            pausePointerWasHeld = false;
+        }
+    }
+
+    private void HandleRestartKey()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.rKey.wasPressedThisFrame)
+        {
+            RestartGame();
+        }
+    }
+
+    private void HandleRestartInput()
+    {
+        if (!timerFinished)
+        {
+            return;
+        }
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.rKey.wasPressedThisFrame)
+        {
+            RestartGame();
+            return;
+        }
+
+        Touchscreen touchscreen = Touchscreen.current;
+        if (touchscreen != null && touchscreen.primaryTouch.press.wasReleasedThisFrame)
+        {
+            RestartGame();
+            return;
+        }
+
+        Mouse mouse = Mouse.current;
+        if (mouse != null && mouse.leftButton.wasReleasedThisFrame)
+        {
+            RestartGame();
         }
     }
 
@@ -316,186 +923,52 @@ public class GameHUD : MonoBehaviour
         return false;
     }
 
-    public void StartGame()
+    private void UpdatePowerMeter()
     {
-        RestartGame();
-    }
-
-    private void HandleRestartInput()
-    {
-        if (!gameStarted)
+        if (powerPanel == null || !powerPanel.activeSelf || powerFillRect == null)
         {
             return;
         }
 
-        Keyboard keyboard = Keyboard.current;
-        if (keyboard != null && keyboard.rKey.wasPressedThisFrame)
+        float amount = ballThrowController != null ? Mathf.Clamp01(ballThrowController.CurrentPowerNormalized) : 0f;
+        bool hasPower = amount > 0.0001f;
+
+        if (hasPower)
         {
-            RestartGame();
-            return;
+            Vector2 size = powerFillRect.sizeDelta;
+            size.x = 354f * amount;
+            powerFillRect.sizeDelta = size;
         }
 
-        if (!timerFinished)
+        if (powerFillImage != null && powerFillImage.enabled != hasPower)
         {
-            return;
+            powerFillImage.enabled = hasPower;
         }
 
-        Touchscreen touchscreen = Touchscreen.current;
-        if (touchscreen != null && touchscreen.primaryTouch.press.wasReleasedThisFrame)
+        int percent = Mathf.RoundToInt(amount * 100f);
+        if (powerPercentText != null && powerPercentText.text != percent + "%")
         {
-            RestartGame();
-        }
-    }
-
-    public void RestartGame()
-    {
-        gameStarted = true;
-
-        if (gameAudioSource != null)
-        {
-            gameAudioSource.Stop();
-        }
-
-        timeRemaining = Mathf.Max(0f, startingTime);
-        displayedTime = Mathf.CeilToInt(timeRemaining);
-        timerFinished = false;
-
-        if (startPanel != null) startPanel.SetActive(false);
-        if (startButtonRect != null) startButtonRect.localScale = Vector3.one;
-        if (startButtonImage != null) startButtonImage.color = StartButtonNormalColor;
-        if (gameOverPanel != null) gameOverPanel.SetActive(false);
-        if (gameOverScoreText != null) gameOverScoreText.gameObject.SetActive(false);
-        if (gameOverHintText != null) gameOverHintText.gameObject.SetActive(false);
-
-        if (timerText != null)
-        {
-            timerText.gameObject.SetActive(true);
-            timerText.text = "Time: " + displayedTime;
-            timerText.SetAllDirty();
-        }
-
-        if (timeUpText != null)
-        {
-            timeUpText.gameObject.SetActive(false);
-        }
-
-        if (hoopScore != null)
-        {
-            hoopScore.ResetScore();
-        }
-
-        lastScore = 0;
-
-        if (scoreText != null)
-        {
-            scoreText.gameObject.SetActive(true);
-            scoreText.text = "Score: 0";
-            scoreText.SetAllDirty();
-        }
-
-        SetHudPanelsVisible(true);
-        SetPowerPanelVisible(true);
-        ResetPowerMeter();
-
-        ResetScoreFeedback();
-
-        if (ballThrowController != null)
-        {
-            ballThrowController.RestartBall();
-        }
-
-        Canvas.ForceUpdateCanvases();
-    }
-
-    private void LateUpdate()
-    {
-        if (pendingTextRefreshes <= 0)
-        {
-            return;
-        }
-
-        pendingTextRefreshes--;
-
-        if (scoreText != null)
-        {
-            scoreText.SetAllDirty();
-        }
-
-        if (timerText != null)
-        {
-            timerText.SetAllDirty();
-        }
-
-        if (timeUpText != null && timeUpText.gameObject.activeSelf)
-        {
-            timeUpText.SetAllDirty();
-        }
-
-        if (startTitleText != null) startTitleText.SetAllDirty();
-        if (startSubtitleText != null) startSubtitleText.SetAllDirty();
-        if (startButtonText != null) startButtonText.SetAllDirty();
-
-        Canvas.ForceUpdateCanvases();
-    }
-
-    private void UpdateScoreText()
-    {
-        if (hoopScore == null || scoreText == null)
-        {
-            return;
-        }
-
-        int currentScore = hoopScore.score;
-        if (currentScore != lastScore)
-        {
-            if (currentScore > lastScore)
-            {
-                PlayGameSound(scoreClip, 0.9f);
-                ShowScoreFeedback();
-            }
-
-            lastScore = currentScore;
-            scoreText.text = "Score: " + currentScore;
-
-            if (timerFinished && gameOverScoreText != null && gameOverScoreText.gameObject.activeSelf)
-            {
-                gameOverScoreText.text = "Final Score: " + currentScore;
-                gameOverScoreText.SetAllDirty();
-            }
+            powerPercentText.text = percent + "%";
         }
     }
 
-    private void UpdateTimer()
+    private void ResetPowerMeter()
     {
-        if (!gameStarted || timerFinished)
+        if (powerPercentText != null)
         {
-            return;
+            powerPercentText.text = "0%";
         }
 
-        timeRemaining -= Time.deltaTime;
-
-        if (timeRemaining <= 0f)
+        if (powerFillRect != null)
         {
-            timeRemaining = 0f;
-            timerFinished = true;
-            timerText.text = "Time: 0";
-            timeUpText.gameObject.SetActive(true);
-            ShowGameOver();
-            PlayGameSound(timeUpClip, 0.9f);
-
-            if (ballThrowController != null)
-            {
-                ballThrowController.canThrow = false;
-            }
-
-            return;
+            Vector2 size = powerFillRect.sizeDelta;
+            size.x = 0f;
+            powerFillRect.sizeDelta = size;
         }
 
-        int newDisplayedTime = Mathf.CeilToInt(timeRemaining);
-        if (newDisplayedTime != displayedTime)
+        if (powerFillImage != null)
         {
-            displayedTime = newDisplayedTime;
-            timerText.text = "Time: " + displayedTime;
+            powerFillImage.enabled = false;
         }
     }
 
@@ -533,145 +1006,321 @@ public class GameHUD : MonoBehaviour
         RectTransform hudRoot = safeAreaObject.GetComponent<RectTransform>();
         hudRoot.anchorMin = Vector2.zero;
         hudRoot.anchorMax = Vector2.one;
-        hudRoot.pivot = new Vector2(0.5f, 0.5f);
         hudRoot.offsetMin = Vector2.zero;
         hudRoot.offsetMax = Vector2.zero;
-        hudRoot.localScale = Vector3.one;
-        hudRoot.localRotation = Quaternion.identity;
         safeAreaObject.AddComponent<SafeAreaFitter>();
 
         Font font = ResolveFont();
 
-        RectTransform scorePanel = CreateHudPanel(
-            hudRoot,
-            "ScorePanel",
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(HudPanelMarginX, -HudPanelMarginY));
-        scorePanelObject = scorePanel.gameObject;
-        CreateHudIcon(scorePanel, "ScoreIcon", GetBasketballIconSprite());
+        scorePanel = CreatePanel(hudRoot, "ScorePanel", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(MarginX, -MarginY), new Vector2(PanelWidth, PanelHeight));
+        scorePanelRect = scorePanel.GetComponent<RectTransform>();
+        scoreText = CreateText(scorePanel.transform, "ScoreText", font, TextAnchor.MiddleCenter, fontSize, Vector2.zero, new Vector2(PanelWidth - 24f, PanelHeight), textColor);
+        scoreText.text = "Score: 0";
 
-        scoreText = CreateText(
-            scorePanel,
-            "ScoreText",
-            font,
-            new Vector2(0f, 0.5f),
-            new Vector2(0f, 0.5f),
-            new Vector2(0f, 0.5f),
-            new Vector2(HudIconLeftPadding + HudIconSize + HudIconTextGap, 0f),
-            new Vector2(HudPanelWidth - HudIconLeftPadding - HudIconSize - HudIconTextGap - HudTextRightPadding, HudPanelHeight),
-            TextAnchor.MiddleLeft,
-            fontSize,
-            false);
-        StyleHudValueText(scoreText);
+        timerPanel = CreatePanel(hudRoot, "TimerPanel", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-MarginX, -MarginY), new Vector2(PanelWidth, PanelHeight));
+        timerPanelRect = timerPanel.GetComponent<RectTransform>();
+        timerText = CreateText(timerPanel.transform, "TimerText", font, TextAnchor.MiddleCenter, fontSize, Vector2.zero, new Vector2(PanelWidth - 24f, PanelHeight), textColor);
+        timerText.text = "Time: " + startingTime;
 
-        RectTransform timerPanel = CreateHudPanel(
-            hudRoot,
-            "TimerPanel",
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(-HudPanelMarginX, -HudPanelMarginY));
-        timerPanelObject = timerPanel.gameObject;
-        CreateHudIcon(timerPanel, "TimerIcon", GetTimerIconSprite());
+        streakText = CreateText(hudRoot, "StreakText", font, TextAnchor.MiddleLeft, 28, new Vector2(MarginX + 180f, -(MarginY + PanelHeight + 46f)), new Vector2(360f, 40f), ScorePopColor, new Vector2(0f, 1f));
+        streakText.text = "STREAK x2";
+        streakText.gameObject.SetActive(false);
 
-        timerText = CreateText(
-            timerPanel,
-            "TimerText",
-            font,
-            new Vector2(0f, 0.5f),
-            new Vector2(0f, 0.5f),
-            new Vector2(0f, 0.5f),
-            new Vector2(HudIconLeftPadding + HudIconSize + HudIconTextGap, 0f),
-            new Vector2(HudPanelWidth - HudIconLeftPadding - HudIconSize - HudIconTextGap - HudTextRightPadding, HudPanelHeight),
-            TextAnchor.MiddleLeft,
-            fontSize,
-            false);
-        StyleHudValueText(timerText);
+        popupText = CreateText(hudRoot, "PopupText", font, TextAnchor.MiddleLeft, fontSize + 8, new Vector2(MarginX + PanelWidth + 190f, -(MarginY + PanelHeight * 0.5f)), new Vector2(360f, 60f), ScorePopColor, new Vector2(0f, 1f));
+        popupRect = popupText.rectTransform;
+        popupBasePosition = popupRect.anchoredPosition;
+        popupText.gameObject.SetActive(false);
+
+        countdownText = CreateText(hudRoot, "CountdownText", font, TextAnchor.MiddleCenter, 160, new Vector2(0f, 40f), new Vector2(1200f, 260f), new Color(1f, 0.78f, 0.3f, 1f));
+        countdownText.text = "3";
+        countdownText.gameObject.SetActive(false);
 
         BuildPowerMeter(hudRoot, font);
+        BuildPauseButton(hudRoot, font);
 
-        timeUpText = CreateText(
-            hudRoot,
-            "TimeUpText",
-            font,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 85f),
-            new Vector2(1000f, 160f),
-            TextAnchor.MiddleCenter,
-            Mathf.Clamp(timeUpFontSize, 60, 80));
-
-        scoreRect = scoreText.rectTransform;
-        scoreBaseScale = scoreRect.localScale;
-
-        scorePopText = CreateText(
-            hudRoot,
-            "ScorePopText",
-            font,
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(HudPanelMarginX + HudPanelWidth + 14f, -(HudPanelMarginY + (HudPanelHeight - 60f) * 0.5f)),
-            new Vector2(140f, 60f),
-            TextAnchor.MiddleLeft,
-            fontSize + 4);
-
-        scorePopText.color = ScorePopColor;
-        scorePopText.text = "+1";
-        scorePopText.gameObject.SetActive(false);
-
-        gameOverScoreText = CreateText(
-            hudRoot,
-            "GameOverScoreText",
-            font,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -15f),
-            new Vector2(1000f, 80f),
-            TextAnchor.MiddleCenter,
-            46);
-
-        gameOverHintText = CreateText(
-            hudRoot,
-            "GameOverHintText",
-            font,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -95f),
-            new Vector2(1000f, 60f),
-            TextAnchor.MiddleCenter,
-            26);
-
-        gameOverScoreText.text = "Final Score: 0";
-        gameOverHintText.text = "Press R to play again";
-        gameOverHintText.color = new Color(0.76f, 0.78f, 0.82f, 1f);
-        gameOverScoreText.gameObject.SetActive(false);
-        gameOverHintText.gameObject.SetActive(false);
-
-        gameOverPanel = CreateOverlayPanel(
-            hudRoot,
-            "GameOverPanel",
-            new Color(0.03f, 0.04f, 0.06f, 0.78f),
-            true);
-
-        startPanel = CreateOverlayPanel(
-            hudRoot,
-            "StartPanel",
-            new Color(0.03f, 0.04f, 0.06f, 0.82f),
-            false);
+        startPanel = CreateOverlay(hudRoot, "StartPanel", new Color(0.03f, 0.04f, 0.06f, 0.82f));
         BuildStartScreen(startPanel.transform, font);
 
-        gameOverPanel.SetActive(false);
+        gameOverPanel = CreateOverlay(hudRoot, "GameOverPanel", new Color(0.03f, 0.04f, 0.06f, 0.82f));
+        BuildGameOverScreen(gameOverPanel.transform, font);
 
-        scoreText.text = "Score: 0";
-        timerText.text = "Time: " + Mathf.Max(0, startingTime);
-        timeUpText.text = "TIME UP";
-        timeUpText.gameObject.SetActive(false);
+        pausePanel = CreateOverlay(hudRoot, "PausePanel", new Color(0.02f, 0.03f, 0.05f, 0.8f));
+        BuildPauseScreen(pausePanel.transform, font);
+
+        SetGameOverVisible(false);
+        SetPausePanelVisible(false);
+        SetPauseButtonVisible(false);
 
         Canvas.ForceUpdateCanvases();
+    }
+
+    private void BuildPowerMeter(RectTransform parent, Font font)
+    {
+        powerPanel = CreatePanel(
+            parent,
+            "PowerPanel",
+            new Vector2(0.5f, 0f),
+            new Vector2(0.5f, 0f),
+            new Vector2(0f, 32f),
+            new Vector2(420f, 80f));
+
+        Text label = CreateText(powerPanel.transform, "PowerLabel", font, TextAnchor.MiddleCenter, 22, new Vector2(0f, 24f), new Vector2(200f, 24f), textColor);
+        label.text = "POWER";
+
+        powerPercentText = CreateText(powerPanel.transform, "PowerPercent", font, TextAnchor.MiddleRight, 18, new Vector2(185f, 24f), new Vector2(80f, 24f), AccentColor);
+        powerPercentText.text = "0%";
+
+        GameObject track = CreateImage(powerPanel.transform, "PowerTrack", new Vector2(360f, 16f), new Vector2(0f, -14f), new Color(0.015f, 0.018f, 0.022f, 0.92f));
+        RectTransform trackRect = track.GetComponent<RectTransform>();
+
+        GameObject border = CreateImage(track.transform, "PowerBorder", new Vector2(360f, 16f), Vector2.zero, BorderColor);
+        border.GetComponent<Image>().sprite = GetBorderSprite();
+        border.GetComponent<Image>().type = Image.Type.Sliced;
+
+        GameObject fill = CreateImage(track.transform, "PowerFill", new Vector2(0f, 10f), Vector2.zero, new Color(1f, 0.52f, 0.1f, 1f));
+        powerFillRect = fill.GetComponent<RectTransform>();
+        powerFillRect.anchorMin = new Vector2(0f, 0.5f);
+        powerFillRect.anchorMax = new Vector2(0f, 0.5f);
+        powerFillRect.pivot = new Vector2(0f, 0.5f);
+        powerFillRect.anchoredPosition = new Vector2(3f, 0f);
+        powerFillImage = fill.GetComponent<Image>();
+        powerFillImage.enabled = false;
+    }
+
+    private void BuildPauseButton(Transform parent, Font font)
+    {
+        pauseButton = CreatePanel(
+            parent,
+            "PauseButton",
+            new Vector2(1f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(-(MarginX + PanelWidth + PauseButtonGap), -MarginY),
+            new Vector2(PauseButtonSize, PauseButtonSize));
+
+        pauseButtonRect = pauseButton.GetComponent<RectTransform>();
+        pauseButtonImage = pauseButton.GetComponent<Image>();
+        pauseButtonImage.color = PanelColor;
+
+        Text icon = CreateText(pauseButton.transform, "PauseIcon", font, TextAnchor.MiddleCenter, 30, Vector2.zero, new Vector2(PauseButtonSize, PauseButtonSize), textColor);
+        icon.text = "II";
+        icon.fontStyle = FontStyle.Bold;
+
+        pauseButton.SetActive(false);
+    }
+
+    private void BuildStartScreen(Transform parent, Font font)
+    {
+        startTitleText = CreateText(parent, "StartTitle", font, TextAnchor.MiddleCenter, 84, new Vector2(0f, 190f), new Vector2(1500f, 160f), textColor);
+        startTitleText.text = "BASKETBALL RUSH";
+
+        startSubtitleText = CreateText(parent, "StartSubtitle", font, TextAnchor.MiddleCenter, 30, new Vector2(0f, 55f), new Vector2(1200f, 60f), new Color(0.85f, 0.87f, 0.9f, 1f));
+        startSubtitleText.text = "Drag and release to shoot";
+
+        startBestText = CreateText(parent, "StartBest", font, TextAnchor.MiddleCenter, 28, new Vector2(0f, 2f), new Vector2(1000f, 40f), new Color(1f, 0.82f, 0.25f, 1f));
+        startBestText.text = "BEST: " + bestScore;
+
+        HudButton button = CreateButton(parent, "StartButton", font, "START GAME", new Vector2(0f, -80f), new Vector2(380f, 96f), StartButtonColor);
+        startButtonRect = button.Rect;
+        startButtonImage = button.Image;
+        startButtonLabel = button.Label;
+    }
+
+    private void BuildGameOverScreen(Transform parent, Font font)
+    {
+        gameOverTitleText = CreateText(parent, "GameOverTitle", font, TextAnchor.MiddleCenter, timeUpFontSize, new Vector2(0f, 150f), new Vector2(1000f, 150f), textColor);
+        gameOverTitleText.text = "TIME UP!";
+
+        gameOverScoreText = CreateText(parent, "GameOverScore", font, TextAnchor.MiddleCenter, 46, new Vector2(0f, -15f), new Vector2(1000f, 80f), textColor);
+        gameOverScoreText.text = "Final Score: 0";
+
+        gameOverBestText = CreateText(parent, "GameOverBest", font, TextAnchor.MiddleCenter, 30, new Vector2(0f, -90f), new Vector2(1000f, 50f), ScorePopColor);
+        gameOverBestText.text = "BEST: 0";
+
+        gameOverHintText = CreateText(parent, "GameOverHint", font, TextAnchor.MiddleCenter, 26, new Vector2(0f, -160f), new Vector2(1000f, 50f), new Color(0.76f, 0.78f, 0.82f, 1f));
+        gameOverHintText.text = "Press R or tap to play again";
+    }
+
+    private void BuildPauseScreen(Transform parent, Font font)
+    {
+        pauseTitleText = CreateText(parent, "PauseTitle", font, TextAnchor.MiddleCenter, 84, new Vector2(0f, 150f), new Vector2(1000f, 120f), textColor);
+        pauseTitleText.text = "PAUSED";
+
+        HudButton button = CreateButton(parent, "ResumeButton", font, "RESUME", new Vector2(0f, -60f), new Vector2(380f, 96f), ResumeButtonColor);
+        resumeButtonRect = button.Rect;
+        resumeButtonImage = button.Image;
+        resumeButtonLabel = button.Label;
+
+        pauseHintText = CreateText(parent, "PauseHint", font, TextAnchor.MiddleCenter, 24, new Vector2(0f, -160f), new Vector2(1000f, 50f), new Color(0.76f, 0.78f, 0.82f, 1f));
+        pauseHintText.text = "Press P or Esc, or tap resume";
+    }
+
+    private HudButton CreateButton(Transform parent, string name, Font font, string label, Vector2 position, Vector2 size, Color color)
+    {
+        GameObject button = new GameObject(name, typeof(RectTransform));
+        button.layer = 5;
+        button.transform.SetParent(parent, false);
+
+        RectTransform rect = button.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+
+        Image image = button.AddComponent<Image>();
+        image.sprite = GetPanelSprite();
+        image.type = Image.Type.Sliced;
+        image.color = color;
+        image.raycastTarget = false;
+
+        Outline outline = button.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.55f);
+        outline.effectDistance = new Vector2(2f, -2f);
+
+        Text text = CreateText(button.transform, "Label", font, TextAnchor.MiddleCenter, 36, Vector2.zero, size, Color.white);
+        text.text = label;
+        text.fontStyle = FontStyle.Bold;
+
+        return new HudButton
+        {
+            Rect = rect,
+            Image = image,
+            Label = text
+        };
+    }
+
+    private GameObject CreatePanel(Transform parent, string name, Vector2 anchor, Vector2 pivot, Vector2 position, Vector2 size)
+    {
+        GameObject panel = new GameObject(name, typeof(RectTransform));
+        panel.layer = 5;
+        panel.transform.SetParent(parent, false);
+
+        RectTransform rect = panel.GetComponent<RectTransform>();
+        rect.anchorMin = anchor;
+        rect.anchorMax = anchor;
+        rect.pivot = pivot;
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+
+        Image image = panel.AddComponent<Image>();
+        image.sprite = GetPanelSprite();
+        image.type = Image.Type.Sliced;
+        image.color = PanelColor;
+        image.raycastTarget = false;
+
+        GameObject border = CreateImage(rect, "Border", size, Vector2.zero, BorderColor);
+        border.GetComponent<Image>().sprite = GetBorderSprite();
+        border.GetComponent<Image>().type = Image.Type.Sliced;
+
+        GameObject accent = CreateImage(rect, "Accent", new Vector2(size.x - 20f, 3f), new Vector2(0f, -size.y * 0.5f + 2f), new Color(1f, 0.55f, 0.14f, 0.8f));
+        accent.GetComponent<RectTransform>().anchorMin = new Vector2(0.5f, 0f);
+        accent.GetComponent<RectTransform>().anchorMax = new Vector2(0.5f, 0f);
+        accent.GetComponent<RectTransform>().pivot = new Vector2(0.5f, 0f);
+
+        return panel;
+    }
+
+    private GameObject CreateOverlay(Transform parent, string name, Color color)
+    {
+        GameObject panel = new GameObject(name, typeof(RectTransform));
+        panel.layer = 5;
+        panel.transform.SetParent(parent, false);
+
+        RectTransform rect = panel.GetComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+
+        Image image = panel.AddComponent<Image>();
+        image.color = color;
+        image.raycastTarget = false;
+
+        return panel;
+    }
+
+    private Text CreateText(Transform parent, string name, Font font, TextAnchor alignment, int size, Vector2 position, Vector2 sizeDelta, Color color, Vector2? anchorOverride = null)
+    {
+        GameObject textObject = new GameObject(name, typeof(RectTransform));
+        textObject.layer = 5;
+        textObject.transform.SetParent(parent, false);
+
+        Vector2 anchor = anchorOverride ?? new Vector2(0.5f, 0.5f);
+        RectTransform rect = textObject.GetComponent<RectTransform>();
+        rect.anchorMin = anchor;
+        rect.anchorMax = anchor;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = sizeDelta;
+
+        Text text = textObject.AddComponent<Text>();
+        text.font = font;
+        text.fontSize = size;
+        text.fontStyle = FontStyle.Bold;
+        text.color = color;
+        text.alignment = alignment;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.raycastTarget = false;
+        text.supportRichText = false;
+
+        Outline outline = textObject.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        outline.effectDistance = new Vector2(1.5f, -1.5f);
+
+        return text;
+    }
+
+    private static GameObject CreateImage(Transform parent, string name, Vector2 size, Vector2 position, Color color)
+    {
+        GameObject imageObject = new GameObject(name, typeof(RectTransform));
+        imageObject.layer = 5;
+        imageObject.transform.SetParent(parent, false);
+
+        RectTransform rect = imageObject.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+
+        Image image = imageObject.AddComponent<Image>();
+        image.sprite = GetPanelSprite();
+        image.type = Image.Type.Sliced;
+        image.color = color;
+        image.raycastTarget = false;
+        return imageObject;
+    }
+
+    private void SetPanelsVisible(bool visible)
+    {
+        if (scorePanel != null) scorePanel.SetActive(visible);
+        if (timerPanel != null) timerPanel.SetActive(visible);
+    }
+
+    private void SetPowerVisible(bool visible)
+    {
+        if (powerPanel != null) powerPanel.SetActive(visible);
+    }
+
+    private void SetStartPanelVisible(bool visible)
+    {
+        if (startPanel != null) startPanel.SetActive(visible);
+    }
+
+    private void SetGameOverVisible(bool visible)
+    {
+        if (gameOverPanel != null) gameOverPanel.SetActive(visible);
+    }
+
+    private void SetPausePanelVisible(bool visible)
+    {
+        if (pausePanel != null) pausePanel.SetActive(visible);
+    }
+
+    private void SetPauseButtonVisible(bool visible)
+    {
+        if (pauseButton != null) pauseButton.SetActive(visible);
     }
 
     private Font ResolveFont()
@@ -687,486 +1336,81 @@ public class GameHUD : MonoBehaviour
             return sharedFont;
         }
 
-        Font font = Resources.Load<Font>("HUDFont");
-        if (font == null)
+        sharedFont = Resources.Load<Font>("HUDFont");
+
+        if (sharedFont == null)
         {
-            font = TryGetBuiltinFont("LegacyRuntime.ttf");
+            try
+            {
+                sharedFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            }
+            catch
+            {
+                sharedFont = null;
+            }
         }
 
-        if (font == null)
+        if (sharedFont == null)
         {
-            font = TryGetBuiltinFont("Arial.ttf");
+            try
+            {
+                sharedFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+            catch
+            {
+                sharedFont = null;
+            }
         }
 
-        if (font == null)
+        if (sharedFont == null)
         {
             string[] candidates = { "Segoe UI", "Arial", "Tahoma", "Verdana", "Helvetica" };
-            for (int i = 0; i < candidates.Length && font == null; i++)
+            for (int i = 0; i < candidates.Length && sharedFont == null; i++)
             {
                 try
                 {
-                    font = Font.CreateDynamicFontFromOSFont(candidates[i], Mathf.Max(16, fontSize));
+                    sharedFont = Font.CreateDynamicFontFromOSFont(candidates[i], Mathf.Max(16, fontSize));
                 }
                 catch
                 {
-                    font = null;
+                    sharedFont = null;
                 }
             }
         }
 
-        if (font == null)
-        {
-            Debug.LogError("[GameHUD] No usable font was found. HUD text cannot be rendered.");
-        }
-
-        sharedFont = font;
         return sharedFont;
     }
 
-    private static Font TryGetBuiltinFont(string resourceName)
+    private static Sprite GetPanelSprite()
     {
-        try
+        if (panelSprite == null)
         {
-            return Resources.GetBuiltinResource<Font>(resourceName);
+            panelSprite = CreateRoundedSprite(64, 14f, 0f);
         }
-        catch
-        {
-            return null;
-        }
+
+        return panelSprite;
     }
 
-    private Text CreateText(
-        Transform parent,
-        string objectName,
-        Font font,
-        Vector2 anchorMin,
-        Vector2 anchorMax,
-        Vector2 pivot,
-        Vector2 anchoredPosition,
-        Vector2 sizeDelta,
-        TextAnchor alignment,
-        int textSize,
-        bool addOutline = true)
+    private static Sprite GetBorderSprite()
     {
-        GameObject textObject = new GameObject(objectName, typeof(RectTransform));
-        textObject.layer = 5;
-        textObject.SetActive(false);
-        textObject.transform.SetParent(parent, false);
-
-        RectTransform rect = textObject.GetComponent<RectTransform>();
-        rect.localScale = Vector3.one;
-        rect.localRotation = Quaternion.identity;
-        rect.anchorMin = anchorMin;
-        rect.anchorMax = anchorMax;
-        rect.pivot = pivot;
-        rect.sizeDelta = sizeDelta;
-        rect.anchoredPosition = anchoredPosition;
-
-        Text text = textObject.AddComponent<Text>();
-        text.font = font;
-        text.fontSize = textSize;
-        text.color = new Color(textColor.r, textColor.g, textColor.b, 1f);
-        text.alignment = alignment;
-        text.alignByGeometry = false;
-        text.resizeTextForBestFit = false;
-        text.supportRichText = false;
-        text.horizontalOverflow = HorizontalWrapMode.Overflow;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
-        text.raycastTarget = false;
-        text.maskable = false;
-        text.enabled = true;
-
-        CanvasRenderer canvasRenderer = text.canvasRenderer;
-        canvasRenderer.cull = false;
-        canvasRenderer.SetAlpha(1f);
-
-        if (addOutline)
+        if (borderSprite == null)
         {
-            Outline outline = textObject.AddComponent<Outline>();
-            outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
-            outline.effectDistance = new Vector2(1.5f, -1.5f);
-            outline.useGraphicAlpha = true;
+            borderSprite = CreateRoundedSprite(64, 14f, 2.2f);
         }
 
-        textObject.SetActive(true);
-        text.SetAllDirty();
-
-        return text;
+        return borderSprite;
     }
 
-    private void SetHudPanelsVisible(bool visible)
-    {
-        if (scorePanelObject != null)
-        {
-            scorePanelObject.SetActive(visible);
-        }
-
-        if (timerPanelObject != null)
-        {
-            timerPanelObject.SetActive(visible);
-        }
-    }
-
-    private void SetPowerPanelVisible(bool visible)
-    {
-        if (powerPanelObject != null)
-        {
-            powerPanelObject.SetActive(visible);
-        }
-    }
-
-    private void BuildPowerMeter(Transform parent, Font font)
-    {
-        RectTransform panel = CreateHudPanel(
-            parent,
-            "PowerPanel",
-            new Vector2(0.5f, 0f),
-            new Vector2(0.5f, 0f),
-            new Vector2(0f, PowerPanelMarginBottom),
-            new Vector2(PowerPanelWidth, PowerPanelHeight));
-        powerPanelObject = panel.gameObject;
-
-        Text powerLabel = CreateText(
-            panel,
-            "PowerLabel",
-            font,
-            new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f),
-            new Vector2(0f, -8f),
-            new Vector2(220f, 22f),
-            TextAnchor.MiddleCenter,
-            PowerLabelFontSize,
-            false);
-        powerLabel.text = "POWER";
-        StyleHudValueText(powerLabel);
-
-        powerPercentText = CreateText(
-            panel,
-            "PowerPercentText",
-            font,
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(-18f, -8f),
-            new Vector2(100f, 22f),
-            TextAnchor.MiddleRight,
-            PowerPercentFontSize,
-            false);
-        powerPercentText.color = PowerAccentColor;
-        StyleHudValueText(powerPercentText);
-
-        CreatePowerBar(panel);
-        ResetPowerMeter();
-    }
-
-    private void CreatePowerBar(RectTransform panel)
-    {
-        GameObject trackObject = new GameObject("PowerBarTrack", typeof(RectTransform));
-        trackObject.layer = 5;
-        trackObject.transform.SetParent(panel, false);
-
-        RectTransform trackRect = trackObject.GetComponent<RectTransform>();
-        trackRect.localScale = Vector3.one;
-        trackRect.localRotation = Quaternion.identity;
-        trackRect.anchorMin = new Vector2(0.5f, 0.5f);
-        trackRect.anchorMax = new Vector2(0.5f, 0.5f);
-        trackRect.pivot = new Vector2(0.5f, 0.5f);
-        trackRect.anchoredPosition = new Vector2(0f, -14f);
-        trackRect.sizeDelta = new Vector2(PowerBarWidth, PowerBarHeight);
-
-        Image trackImage = trackObject.AddComponent<Image>();
-        trackImage.sprite = GetPowerBarTrackSprite();
-        trackImage.color = PowerTrackColor;
-        trackImage.type = Image.Type.Sliced;
-        trackImage.raycastTarget = false;
-        trackImage.maskable = false;
-
-        CreatePanelImage(
-            trackObject.transform,
-            "PowerBarBorder",
-            GetPowerBarBorderSprite(),
-            HudPanelBorderColor,
-            Vector2.zero,
-            new Vector2(PowerBarWidth, PowerBarHeight),
-            false);
-
-        GameObject fillObject = new GameObject("PowerBarFill", typeof(RectTransform));
-        fillObject.layer = 5;
-        fillObject.transform.SetParent(trackObject.transform, false);
-
-        powerBarFillRect = fillObject.GetComponent<RectTransform>();
-        powerBarFillRect.localScale = Vector3.one;
-        powerBarFillRect.localRotation = Quaternion.identity;
-        powerBarFillRect.anchorMin = new Vector2(0f, 0.5f);
-        powerBarFillRect.anchorMax = new Vector2(0f, 0.5f);
-        powerBarFillRect.pivot = new Vector2(0f, 0.5f);
-        powerBarFillRect.anchoredPosition = new Vector2(PowerBarInset, 0f);
-        powerBarFillRect.sizeDelta = new Vector2(0f, PowerBarFillHeight);
-
-        powerBarFillImage = fillObject.AddComponent<Image>();
-        powerBarFillImage.sprite = GetPowerBarFillSprite();
-        powerBarFillImage.color = PowerFillColor;
-        powerBarFillImage.type = Image.Type.Sliced;
-        powerBarFillImage.raycastTarget = false;
-        powerBarFillImage.maskable = false;
-        powerBarFillImage.enabled = false;
-
-        powerBarFillMaxWidth = PowerBarWidth - PowerBarInset * 2f;
-    }
-
-    private void UpdatePowerMeter()
-    {
-        if (powerPanelObject == null || !powerPanelObject.activeSelf || powerBarFillRect == null)
-        {
-            return;
-        }
-
-        float amount = ballThrowController != null ? Mathf.Clamp01(ballThrowController.CurrentPowerNormalized) : 0f;
-        bool hasPower = amount > 0.0001f;
-
-        if (hasPower)
-        {
-            Vector2 fillSize = powerBarFillRect.sizeDelta;
-            fillSize.x = powerBarFillMaxWidth * amount;
-            powerBarFillRect.sizeDelta = fillSize;
-        }
-
-        if (powerBarFillImage != null && powerBarFillImage.enabled != hasPower)
-        {
-            powerBarFillImage.enabled = hasPower;
-        }
-
-        int percent = Mathf.RoundToInt(amount * 100f);
-        if (percent != displayedPowerPercent)
-        {
-            displayedPowerPercent = percent;
-
-            if (powerPercentText != null)
-            {
-                powerPercentText.text = percent + "%";
-            }
-        }
-    }
-
-    private void ResetPowerMeter()
-    {
-        displayedPowerPercent = 0;
-
-        if (powerPercentText != null)
-        {
-            powerPercentText.text = "0%";
-        }
-
-        if (powerBarFillRect != null)
-        {
-            Vector2 fillSize = powerBarFillRect.sizeDelta;
-            fillSize.x = 0f;
-            powerBarFillRect.sizeDelta = fillSize;
-        }
-
-        if (powerBarFillImage != null)
-        {
-            powerBarFillImage.enabled = false;
-        }
-    }
-
-    private static void StyleHudValueText(Text text)
-    {
-        if (text == null)
-        {
-            return;
-        }
-
-        text.fontStyle = FontStyle.Bold;
-
-        Shadow shadow = text.GetComponent<Shadow>();
-        if (shadow == null)
-        {
-            shadow = text.gameObject.AddComponent<Shadow>();
-        }
-
-        shadow.effectColor = new Color(0f, 0f, 0f, 0.55f);
-        shadow.effectDistance = new Vector2(0f, -1.5f);
-        shadow.useGraphicAlpha = true;
-    }
-
-    private static RectTransform CreateHudPanel(Transform parent, string name, Vector2 anchor, Vector2 pivot, Vector2 anchoredPosition, Vector2? size = null)
-    {
-        GameObject panel = new GameObject(name, typeof(RectTransform));
-        panel.layer = 5;
-        panel.transform.SetParent(parent, false);
-
-        Vector2 panelSize = size ?? new Vector2(HudPanelWidth, HudPanelHeight);
-
-        RectTransform rect = panel.GetComponent<RectTransform>();
-        rect.localScale = Vector3.one;
-        rect.localRotation = Quaternion.identity;
-        rect.anchorMin = anchor;
-        rect.anchorMax = anchor;
-        rect.pivot = pivot;
-        rect.anchoredPosition = anchoredPosition;
-        rect.sizeDelta = panelSize;
-
-        CreatePanelImage(
-            panel.transform,
-            "PanelShadow",
-            GetPanelFillSprite(),
-            HudPanelShadowColor,
-            new Vector2(0f, -3f),
-            panelSize,
-            true);
-
-        CreatePanelImage(
-            panel.transform,
-            "PanelFill",
-            GetPanelFillSprite(),
-            HudPanelColor,
-            Vector2.zero,
-            panelSize,
-            true);
-
-        CreatePanelImage(
-            panel.transform,
-            "PanelBorder",
-            GetPanelBorderSprite(),
-            HudPanelBorderColor,
-            Vector2.zero,
-            panelSize,
-            false);
-
-        return rect;
-    }
-
-    private static void CreatePanelImage(Transform parent, string name, Sprite sprite, Color color, Vector2 offset, Vector2 size, bool fillCenter)
-    {
-        GameObject imageObject = new GameObject(name, typeof(RectTransform));
-        imageObject.layer = 5;
-        imageObject.transform.SetParent(parent, false);
-
-        RectTransform rect = imageObject.GetComponent<RectTransform>();
-        rect.localScale = Vector3.one;
-        rect.localRotation = Quaternion.identity;
-        rect.anchorMin = new Vector2(0.5f, 0.5f);
-        rect.anchorMax = new Vector2(0.5f, 0.5f);
-        rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.anchoredPosition = offset;
-        rect.sizeDelta = size;
-
-        Image image = imageObject.AddComponent<Image>();
-        image.sprite = sprite;
-        image.color = color;
-        image.type = Image.Type.Sliced;
-        image.fillCenter = fillCenter;
-        image.preserveAspect = false;
-        image.raycastTarget = false;
-        image.maskable = false;
-    }
-
-    private static void CreateHudIcon(Transform parent, string name, Sprite sprite)
-    {
-        GameObject iconObject = new GameObject(name, typeof(RectTransform));
-        iconObject.layer = 5;
-        iconObject.transform.SetParent(parent, false);
-
-        RectTransform rect = iconObject.GetComponent<RectTransform>();
-        rect.localScale = Vector3.one;
-        rect.localRotation = Quaternion.identity;
-        rect.anchorMin = new Vector2(0f, 0.5f);
-        rect.anchorMax = new Vector2(0f, 0.5f);
-        rect.pivot = new Vector2(0f, 0.5f);
-        rect.anchoredPosition = new Vector2(HudIconLeftPadding, 0f);
-        rect.sizeDelta = new Vector2(HudIconSize, HudIconSize);
-
-        Image image = iconObject.AddComponent<Image>();
-        image.sprite = sprite;
-        image.color = Color.white;
-        image.preserveAspect = true;
-        image.raycastTarget = false;
-        image.maskable = false;
-    }
-
-    private static Sprite GetPanelFillSprite()
-    {
-        if (hudPanelFillSprite == null)
-        {
-            hudPanelFillSprite = CreateRoundedPanelSprite(64, 16f, 0f);
-        }
-
-        return hudPanelFillSprite;
-    }
-
-    private static Sprite GetPanelBorderSprite()
-    {
-        if (hudPanelBorderSprite == null)
-        {
-            hudPanelBorderSprite = CreateRoundedPanelSprite(64, 16f, 2.5f);
-        }
-
-        return hudPanelBorderSprite;
-    }
-
-    private static Sprite GetBasketballIconSprite()
-    {
-        if (basketballIconSprite == null)
-        {
-            basketballIconSprite = CreateBasketballIconSprite(128);
-        }
-
-        return basketballIconSprite;
-    }
-
-    private static Sprite GetTimerIconSprite()
-    {
-        if (timerIconSprite == null)
-        {
-            timerIconSprite = CreateTimerIconSprite(128);
-        }
-
-        return timerIconSprite;
-    }
-
-    private static Sprite GetPowerBarTrackSprite()
-    {
-        if (powerBarTrackSprite == null)
-        {
-            powerBarTrackSprite = CreateRoundedPanelSprite(48, 8f, 0f, 8f);
-        }
-
-        return powerBarTrackSprite;
-    }
-
-    private static Sprite GetPowerBarBorderSprite()
-    {
-        if (powerBarBorderSprite == null)
-        {
-            powerBarBorderSprite = CreateRoundedPanelSprite(48, 8f, 1.2f, 8f);
-        }
-
-        return powerBarBorderSprite;
-    }
-
-    private static Sprite GetPowerBarFillSprite()
-    {
-        if (powerBarFillSprite == null)
-        {
-            powerBarFillSprite = CreateRoundedPanelSprite(48, 5f, 0f, 5f);
-        }
-
-        return powerBarFillSprite;
-    }
-
-    private static Sprite CreateRoundedPanelSprite(int size, float radius, float borderThickness, float sliceBorder = -1f)
+    private static Sprite CreateRoundedSprite(int size, float radius, float borderThickness)
     {
         Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false, false);
-        texture.name = borderThickness > 0f ? "HudPanelBorder" : "HudPanelFill";
+        texture.name = borderThickness > 0f ? "HudBorder" : "HudPanel";
         texture.hideFlags = HideFlags.HideAndDontSave;
         texture.wrapMode = TextureWrapMode.Clamp;
         texture.filterMode = FilterMode.Bilinear;
 
         Color32[] pixels = new Color32[size * size];
         float half = size * 0.5f;
-        bool drawBorder = borderThickness > 0f;
 
         for (int y = 0; y < size; y++)
         {
@@ -1174,10 +1418,14 @@ public class GameHUD : MonoBehaviour
             {
                 float px = x + 0.5f - half;
                 float py = y + 0.5f - half;
-                float distance = RoundedRectDistance(px, py, half, half, radius);
+                float qx = Mathf.Abs(px) - (half - radius);
+                float qy = Mathf.Abs(py) - (half - radius);
+                float ax = Mathf.Max(qx, 0f);
+                float ay = Mathf.Max(qy, 0f);
+                float distance = Mathf.Sqrt(ax * ax + ay * ay) + Mathf.Min(Mathf.Max(qx, qy), 0f) - radius;
 
                 float alpha;
-                if (drawBorder)
+                if (borderThickness > 0f)
                 {
                     float outer = Mathf.Clamp01(0.5f - distance);
                     float inner = Mathf.Clamp01(0.5f + distance + borderThickness);
@@ -1195,7 +1443,7 @@ public class GameHUD : MonoBehaviour
         texture.SetPixels32(pixels);
         texture.Apply(false, true);
 
-        float borderPixels = sliceBorder > 0f ? sliceBorder : radius + 6f;
+        float slice = borderThickness > 0f ? radius + 4f : radius + 2f;
         return Sprite.Create(
             texture,
             new Rect(0f, 0f, size, size),
@@ -1203,366 +1451,7 @@ public class GameHUD : MonoBehaviour
             100f,
             0,
             SpriteMeshType.FullRect,
-            new Vector4(borderPixels, borderPixels, borderPixels, borderPixels));
-    }
-
-    private static Sprite CreateBasketballIconSprite(int size)
-    {
-        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false, false);
-        texture.name = "HudBasketballIcon";
-        texture.hideFlags = HideFlags.HideAndDontSave;
-        texture.wrapMode = TextureWrapMode.Clamp;
-        texture.filterMode = FilterMode.Bilinear;
-
-        Color32[] pixels = new Color32[size * size];
-        float cx = size * 0.5f;
-        float cy = size * 0.5f;
-        float radius = size * 0.44f;
-        float outlineWidth = size * 0.03f;
-        float seamHalf = size * 0.017f;
-
-        Color bright = new Color(1f, 0.62f, 0.22f);
-        Color dark = new Color(0.9f, 0.33f, 0.07f);
-        Color outlineColor = new Color(0.13f, 0.065f, 0.03f);
-        Color seamColor = new Color(0.09f, 0.045f, 0.025f);
-
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float fx = x + 0.5f;
-                float fy = y + 0.5f;
-                float sx = fx - cx;
-                float sy = fy - cy;
-                float distance = Mathf.Sqrt(sx * sx + sy * sy);
-                float alpha = Mathf.Clamp01(radius - distance + 0.5f);
-
-                if (alpha <= 0f)
-                {
-                    pixels[y * size + x] = new Color32(0, 0, 0, 0);
-                    continue;
-                }
-
-                float gradient = Mathf.Clamp01(0.5f + (-sx * 0.55f + sy * 0.45f) / (radius * 2f));
-                Color color = Color.Lerp(dark, bright, gradient);
-
-                float highlightX = (sx + radius * 0.34f) / (radius * 0.72f);
-                float highlightY = (sy - radius * 0.42f) / (radius * 0.5f);
-                float highlight = Mathf.Clamp01(1f - (highlightX * highlightX + highlightY * highlightY));
-                color = Color.Lerp(color, Color.white, highlight * 0.2f);
-
-                float outlineCoverage = Mathf.Clamp01(distance - (radius - outlineWidth) + 0.5f);
-                color = Color.Lerp(color, outlineColor, outlineCoverage);
-
-                float seamDistance = Mathf.Min(Mathf.Abs(sx), Mathf.Abs(sy));
-                float leftArcX = fx - (cx + radius * 0.9f);
-                float leftArc = Mathf.Abs(Mathf.Sqrt(leftArcX * leftArcX + sy * sy) - radius * 1.25f);
-                float rightArcX = fx - (cx - radius * 0.9f);
-                float rightArc = Mathf.Abs(Mathf.Sqrt(rightArcX * rightArcX + sy * sy) - radius * 1.25f);
-                seamDistance = Mathf.Min(seamDistance, Mathf.Min(leftArc, rightArc));
-
-                float seamCoverage = Mathf.Clamp01(seamHalf - seamDistance + 0.5f);
-                color = Color.Lerp(color, seamColor, seamCoverage);
-
-                pixels[y * size + x] = new Color32(
-                    (byte)Mathf.RoundToInt(Mathf.Clamp01(color.r) * 255f),
-                    (byte)Mathf.RoundToInt(Mathf.Clamp01(color.g) * 255f),
-                    (byte)Mathf.RoundToInt(Mathf.Clamp01(color.b) * 255f),
-                    (byte)Mathf.RoundToInt(alpha * 255f));
-            }
-        }
-
-        texture.SetPixels32(pixels);
-        texture.Apply(false, true);
-
-        return Sprite.Create(
-            texture,
-            new Rect(0f, 0f, size, size),
-            new Vector2(0.5f, 0.5f),
-            100f,
-            0,
-            SpriteMeshType.FullRect);
-    }
-
-    private static Sprite CreateTimerIconSprite(int size)
-    {
-        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false, false);
-        texture.name = "HudTimerIcon";
-        texture.hideFlags = HideFlags.HideAndDontSave;
-        texture.wrapMode = TextureWrapMode.Clamp;
-        texture.filterMode = FilterMode.Bilinear;
-
-        Color32[] pixels = new Color32[size * size];
-        float cx = size * 0.5f;
-        float cy = size * 0.46f;
-        float radius = size * 0.34f;
-        float ringHalf = size * 0.027f;
-
-        Color bright = new Color(1f, 0.64f, 0.24f);
-        Color dark = new Color(0.91f, 0.35f, 0.09f);
-
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float fx = x + 0.5f;
-                float fy = y + 0.5f;
-                float sx = fx - cx;
-                float sy = fy - cy;
-                float distance = Mathf.Sqrt(sx * sx + sy * sy);
-
-                float ringCoverage = Mathf.Clamp01(ringHalf - Mathf.Abs(distance - radius) + 0.5f);
-                float stemCoverage = SegmentCoverage(fx, fy, cx, cy + radius - 2f, cx, cy + radius + 7f, ringHalf * 0.8f);
-                float buttonCoverage = SegmentCoverage(fx, fy, cx - size * 0.08f, cy + radius + 9f, cx + size * 0.08f, cy + radius + 9f, ringHalf * 0.9f);
-                float longHandCoverage = SegmentCoverage(fx, fy, cx, cy, cx, cy + radius * 0.56f, ringHalf * 0.7f);
-                float shortHandCoverage = SegmentCoverage(fx, fy, cx, cy, cx + radius * 0.42f, cy + radius * 0.12f, ringHalf * 0.7f);
-                float centerCoverage = Mathf.Clamp01(radius * 0.11f - distance + 0.5f);
-
-                float alpha = Mathf.Max(
-                    Mathf.Max(ringCoverage, stemCoverage),
-                    Mathf.Max(buttonCoverage, Mathf.Max(longHandCoverage, Mathf.Max(shortHandCoverage, centerCoverage))));
-
-                if (alpha <= 0f)
-                {
-                    pixels[y * size + x] = new Color32(0, 0, 0, 0);
-                    continue;
-                }
-
-                float gradient = Mathf.Clamp01(0.5f + (sy / (radius * 2f)));
-                Color color = Color.Lerp(dark, bright, gradient);
-                color = Color.Lerp(color, Color.white, centerCoverage * 0.3f);
-
-                pixels[y * size + x] = new Color32(
-                    (byte)Mathf.RoundToInt(Mathf.Clamp01(color.r) * 255f),
-                    (byte)Mathf.RoundToInt(Mathf.Clamp01(color.g) * 255f),
-                    (byte)Mathf.RoundToInt(Mathf.Clamp01(color.b) * 255f),
-                    (byte)Mathf.RoundToInt(Mathf.Clamp01(alpha) * 255f));
-            }
-        }
-
-        texture.SetPixels32(pixels);
-        texture.Apply(false, true);
-
-        return Sprite.Create(
-            texture,
-            new Rect(0f, 0f, size, size),
-            new Vector2(0.5f, 0.5f),
-            100f,
-            0,
-            SpriteMeshType.FullRect);
-    }
-
-    private static float RoundedRectDistance(float x, float y, float halfWidth, float halfHeight, float radius)
-    {
-        float qx = Mathf.Abs(x) - (halfWidth - radius);
-        float qy = Mathf.Abs(y) - (halfHeight - radius);
-        float ax = Mathf.Max(qx, 0f);
-        float ay = Mathf.Max(qy, 0f);
-        return Mathf.Sqrt(ax * ax + ay * ay) + Mathf.Min(Mathf.Max(qx, qy), 0f) - radius;
-    }
-
-    private static float SegmentCoverage(float px, float py, float ax, float ay, float bx, float by, float halfThickness)
-    {
-        float vx = bx - ax;
-        float vy = by - ay;
-        float wx = px - ax;
-        float wy = py - ay;
-        float lengthSquared = vx * vx + vy * vy;
-        float t = lengthSquared > 0.0001f ? Mathf.Clamp01((wx * vx + wy * vy) / lengthSquared) : 0f;
-        float dx = wx - vx * t;
-        float dy = wy - vy * t;
-        float distance = Mathf.Sqrt(dx * dx + dy * dy);
-        return Mathf.Clamp01(halfThickness - distance + 0.5f);
-    }
-
-    private GameObject CreateOverlayPanel(Transform parent, string name, Color color, bool behind)
-    {
-        GameObject panel = new GameObject(name, typeof(RectTransform));
-        panel.layer = 5;
-        panel.transform.SetParent(parent, false);
-
-        RectTransform rect = panel.GetComponent<RectTransform>();
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
-
-        Image image = panel.AddComponent<Image>();
-        image.color = color;
-        image.raycastTarget = false;
-
-        if (behind)
-        {
-            panel.transform.SetAsFirstSibling();
-        }
-
-        return panel;
-    }
-
-    private void BuildStartScreen(Transform parent, Font font)
-    {
-        Text title = CreateText(
-            parent,
-            "StartTitle",
-            font,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 190f),
-            new Vector2(1500f, 160f),
-            TextAnchor.MiddleCenter,
-            84);
-        title.text = "BASKETBALL RUSH";
-        startTitleText = title;
-
-        Text subtitle = CreateText(
-            parent,
-            "StartSubtitle",
-            font,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0f, 55f),
-            new Vector2(1200f, 60f),
-            TextAnchor.MiddleCenter,
-            30);
-        subtitle.text = "Drag and release to shoot";
-        subtitle.color = new Color(0.85f, 0.87f, 0.9f, 1f);
-        startSubtitleText = subtitle;
-
-        GameObject buttonObject = new GameObject("StartButton", typeof(RectTransform));
-        buttonObject.layer = 5;
-        buttonObject.transform.SetParent(parent, false);
-
-        startButtonRect = buttonObject.GetComponent<RectTransform>();
-        startButtonRect.anchorMin = new Vector2(0.5f, 0.5f);
-        startButtonRect.anchorMax = new Vector2(0.5f, 0.5f);
-        startButtonRect.pivot = new Vector2(0.5f, 0.5f);
-        startButtonRect.sizeDelta = new Vector2(380f, 96f);
-        startButtonRect.anchoredPosition = new Vector2(0f, -80f);
-
-        startButtonImage = buttonObject.AddComponent<Image>();
-        startButtonImage.color = StartButtonNormalColor;
-        startButtonImage.raycastTarget = false;
-
-        Outline buttonOutline = buttonObject.AddComponent<Outline>();
-        buttonOutline.effectColor = new Color(0.24f, 0.08f, 0.02f, 0.9f);
-        buttonOutline.effectDistance = new Vector2(2f, -2f);
-        buttonOutline.useGraphicAlpha = true;
-
-        Text buttonLabel = CreateText(
-            buttonObject.transform,
-            "StartButtonLabel",
-            font,
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            new Vector2(380f, 96f),
-            TextAnchor.MiddleCenter,
-            36);
-        buttonLabel.text = "START GAME";
-        buttonLabel.color = Color.white;
-        startButtonText = buttonLabel;
-    }
-
-    private void ShowGameOver()
-    {
-        int finalScore = hoopScore != null ? hoopScore.score : lastScore;
-
-        SetPowerPanelVisible(false);
-        ResetPowerMeter();
-
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(true);
-        }
-
-        if (timeUpText != null)
-        {
-            timeUpText.SetAllDirty();
-        }
-
-        if (gameOverScoreText != null)
-        {
-            gameOverScoreText.text = "Final Score: " + finalScore;
-            gameOverScoreText.gameObject.SetActive(true);
-            gameOverScoreText.SetAllDirty();
-        }
-
-        if (gameOverHintText != null)
-        {
-            gameOverHintText.gameObject.SetActive(true);
-            gameOverHintText.SetAllDirty();
-        }
-
-        Canvas.ForceUpdateCanvases();
-    }
-
-    private void ShowScoreFeedback()
-    {
-        if (scorePopText == null || scoreRect == null)
-        {
-            return;
-        }
-
-        scorePulseTimer = ScorePulseDuration;
-        scorePopTimer = ScorePopDuration;
-
-        Color color = ScorePopColor;
-        color.a = 1f;
-        scorePopText.color = color;
-        scorePopText.text = "+1";
-        scorePopText.gameObject.SetActive(true);
-        scorePopText.SetAllDirty();
-        Canvas.ForceUpdateCanvases();
-    }
-
-    private void UpdateScoreFeedback()
-    {
-        if (scoreRect != null && scorePulseTimer > 0f)
-        {
-            scorePulseTimer -= Time.deltaTime;
-            float progress = 1f - Mathf.Clamp01(scorePulseTimer / ScorePulseDuration);
-            float scale = 1f + (ScorePulseScale - 1f) * Mathf.Sin(progress * Mathf.PI);
-            scoreRect.localScale = scoreBaseScale * scale;
-
-            if (scorePulseTimer <= 0f)
-            {
-                scoreRect.localScale = scoreBaseScale;
-            }
-        }
-
-        if (scorePopText != null && scorePopTimer > 0f)
-        {
-            scorePopTimer -= Time.deltaTime;
-            float alpha = Mathf.Clamp01(scorePopTimer / ScorePopFadeDuration);
-            Color color = ScorePopColor;
-            color.a = alpha;
-            scorePopText.color = color;
-
-            if (scorePopTimer <= 0f)
-            {
-                scorePopText.gameObject.SetActive(false);
-            }
-        }
-    }
-
-    private void ResetScoreFeedback()
-    {
-        scorePulseTimer = 0f;
-        scorePopTimer = 0f;
-
-        if (scoreRect != null)
-        {
-            scoreRect.localScale = scoreBaseScale;
-        }
-
-        if (scorePopText != null)
-        {
-            scorePopText.gameObject.SetActive(false);
-        }
+            new Vector4(slice, slice, slice, slice));
     }
 
     private void SetupAudio()
@@ -1580,9 +1469,12 @@ public class GameHUD : MonoBehaviour
 
         if (scoreClip == null) scoreClip = Resources.Load<AudioClip>("Audio/Score");
         if (timeUpClip == null) timeUpClip = Resources.Load<AudioClip>("Audio/TimeUp");
+
+        if (countdownBeepClip == null) countdownBeepClip = CreateToneClip("CountdownBeep", 880f, 0.12f);
+        if (countdownGoClip == null) countdownGoClip = CreateToneClip("CountdownGo", 1320f, 0.22f);
     }
 
-    private void PlayGameSound(AudioClip clip, float volume)
+    private void PlaySound(AudioClip clip, float volume)
     {
         if (clip == null || gameAudioSource == null)
         {
@@ -1590,5 +1482,33 @@ public class GameHUD : MonoBehaviour
         }
 
         gameAudioSource.PlayOneShot(clip, Mathf.Clamp01(volume * gameAudioVolume));
+    }
+
+    private static AudioClip CreateToneClip(string clipName, float frequency, float duration)
+    {
+        const int sampleRate = 44100;
+        int sampleCount = Mathf.Max(1, Mathf.CeilToInt(sampleRate * duration));
+        float[] samples = new float[sampleCount];
+        int fadeSamples = Mathf.Max(1, Mathf.RoundToInt(sampleRate * 0.008f));
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float time = (float)i / sampleRate;
+            float fadeIn = Mathf.Min(1f, (float)i / fadeSamples);
+            float fadeOut = Mathf.Min(1f, (float)(sampleCount - 1 - i) / fadeSamples);
+            float envelope = Mathf.Min(fadeIn, fadeOut);
+            samples[i] = Mathf.Sin(2f * Mathf.PI * frequency * time) * 0.5f * envelope;
+        }
+
+        AudioClip clip = AudioClip.Create(clipName, sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
+
+    private class HudButton
+    {
+        public RectTransform Rect;
+        public Image Image;
+        public Text Label;
     }
 }

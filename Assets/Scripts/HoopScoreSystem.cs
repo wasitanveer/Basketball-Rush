@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 [RequireComponent(typeof(MeshFilter))]
@@ -34,9 +35,22 @@ public class HoopScoreSystem : MonoBehaviour
 
     public int score;
 
+    public int Streak { get; private set; }
+
+    public int LastPoints { get; private set; }
+
+    public bool LastWasSwish { get; private set; }
+
+    public event Action<int, bool, int> BasketScored;
+
+    public event Action ShotMissed;
+
     public void ResetScore()
     {
         score = 0;
+        Streak = 0;
+        LastPoints = 0;
+        LastWasSwish = false;
         scoredThisShot = false;
 
         if (scoreBurst != null)
@@ -61,6 +75,7 @@ public class HoopScoreSystem : MonoBehaviour
         if (ballController != null)
         {
             ballRigidbody = ballController.GetComponent<Rigidbody>();
+            ballController.ShotEnded += HandleShotEnded;
         }
 
         if (net == null)
@@ -71,6 +86,27 @@ public class HoopScoreSystem : MonoBehaviour
         BuildRimRing();
         BuildScoreTrigger();
         SetupScoreBurst();
+    }
+
+    private void OnDestroy()
+    {
+        if (ballController != null)
+        {
+            ballController.ShotEnded -= HandleShotEnded;
+        }
+    }
+
+    private void HandleShotEnded(bool scored)
+    {
+        if (scored)
+        {
+            return;
+        }
+
+        Streak = 0;
+        LastPoints = 0;
+        LastWasSwish = false;
+        ShotMissed?.Invoke();
     }
 
     private void SetupScoreBurst()
@@ -253,7 +289,12 @@ public class HoopScoreSystem : MonoBehaviour
     private void ScoreBasket()
     {
         scoredThisShot = true;
-        score += 1;
+        Streak++;
+
+        int comboBonus = Mathf.Min(4, Streak / 3);
+        LastPoints = 1 + comboBonus;
+        LastWasSwish = ballController != null && !ballController.HadRimOrBackboardContactThisShot;
+        score += LastPoints;
 
         if (net != null)
         {
@@ -265,7 +306,21 @@ public class HoopScoreSystem : MonoBehaviour
             scoreBurst.PlayBurst();
         }
 
-        ballController.ResetBallNow();
+        if (LastWasSwish)
+        {
+            Haptics.Heavy();
+        }
+        else
+        {
+            Haptics.Medium();
+        }
+
+        if (ballController != null)
+        {
+            ballController.OnBasketScored();
+        }
+
+        BasketScored?.Invoke(LastPoints, LastWasSwish, Streak);
     }
 
     private static Mesh CreateTorusMesh(float majorRadius, float minorRadius, int majorSegments, int minorSegments)

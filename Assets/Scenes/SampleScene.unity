@@ -276,12 +276,14 @@ MonoBehaviour:
   launchAngle: 65
   maxYawAngle: 45
   maxDragDistance: 300
+  referenceScreenHeight: 1080
   canThrow: 1
   minPower: 2
   maxPower: 14
   minUpwardDrag: 30
   shotTimeout: 6
   resetDelay: 1
+  basketResetDelay: 1
   fallResetHeight: -2
   ballPhysicsMaterial: {fileID: 13400000, guid: 4c8f2b1d7a3e4f6b9c0d1e2f3a4b5c6d, type: 2}
   aimSmoothing: 20
@@ -301,11 +303,40 @@ MonoBehaviour:
   rimHitClip: {fileID: 0}
   backboardHitClip: {fileID: 0}
   ballAudioVolume: 0.8
+  impactPitchVariation: 0.09
   minImpactSoundSpeed: 1
   impactSoundCooldown: 0.08
   courtTarget: {fileID: 0}
   rimTarget: {fileID: 0}
   backboardTarget: {fileID: 0}
+  ballRb: {fileID: 0}
+  startPosition: {x: 0, y: 0, z: 0}
+  startRotation: {x: 0, y: 0, z: 0, w: 0}
+  dragStart: {x: 0, y: 0}
+  dragCurrent: {x: 0, y: 0}
+  smoothedDrag: {x: 0, y: 0}
+  isDragging: 0
+  pointerWasHeldLastFrame: 0
+  ballInFlight: 0
+  shotTime: 0
+  stoppedTime: 0
+  nextImpactSoundTime: 0
+  courtResetPending: 0
+  courtResetTimer: 0
+  basketResetPending: 0
+  basketResetTimer: 0
+  scoredThisShot: 0
+  rimContactsThisShot: 0
+  backboardContactsThisShot: 0
+  ballAudioSources: []
+  nextAudioSourceIndex: 0
+  kickCamera: {fileID: 0}
+  baseCameraPosition: {x: 0, y: 0, z: 0}
+  cameraKickTimer: 0
+  cameraKickActive: 0
+  ballRenderer: {fileID: 0}
+  shotGlowTimer: 0
+  ballTrail: {fileID: 0}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -418,7 +449,6 @@ MonoBehaviour:
   m_Cameras: []
   m_RendererIndex: -1
   m_VolumeLayerMask:
-    serializedVersion: 2
     m_Bits: 1
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
@@ -560,10 +590,8 @@ MonoBehaviour:
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 1
   m_RenderingLayersMask:
-    serializedVersion: 0
     m_Bits: 1
   m_ShadowRenderingLayersMask:
-    serializedVersion: 0
     m_Bits: 1
   m_Version: 4
   m_LightLayerMask: 1
@@ -621,6 +649,12 @@ MonoBehaviour:
   bottomRadius: 0.16
   netHeight: 0.45
   ropeWidth: 0.018
+  swayAngle: 5
+  swayDuration: 0.65
+  swayCycles: 2
+  netRoot: {fileID: 0}
+  swayTimer: 0
+  swayDirection: 1
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -655,6 +689,10 @@ MonoBehaviour:
   blendDistance: 0
   weight: 1
   sharedProfile: {fileID: 11400000, guid: 10fc4df2da32a41aaa32d77bc913491c, type: 2}
+  m_CachedGameObject: {fileID: 832575517}
+  m_PreviousLayer: 0
+  m_PreviousPriority: 0
+  m_InternalProfile: {fileID: 0}
 --- !u!4 &832575519
 Transform:
   m_ObjectHideFlags: 0
@@ -1580,10 +1618,8 @@ MonoBehaviour:
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 1
   m_RenderingLayersMask:
-    serializedVersion: 0
     m_Bits: 1
   m_ShadowRenderingLayersMask:
-    serializedVersion: 0
     m_Bits: 1
   m_Version: 4
   m_LightLayerMask: 1
@@ -1707,10 +1743,8 @@ MonoBehaviour:
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 1
   m_RenderingLayersMask:
-    serializedVersion: 0
     m_Bits: 1
   m_ShadowRenderingLayersMask:
-    serializedVersion: 0
     m_Bits: 1
   m_Version: 4
   m_LightLayerMask: 1
@@ -1834,10 +1868,8 @@ MonoBehaviour:
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 1
   m_RenderingLayersMask:
-    serializedVersion: 0
     m_Bits: 1
   m_ShadowRenderingLayersMask:
-    serializedVersion: 0
     m_Bits: 1
   m_Version: 4
   m_LightLayerMask: 1
@@ -2319,6 +2351,14 @@ MonoBehaviour:
   triggerOffsetY: 0.3
   minDownwardSpeed: 0.5
   score: 0
+  <Streak>k__BackingField: 0
+  <LastPoints>k__BackingField: 0
+  <LastWasSwish>k__BackingField: 0
+  ballRigidbody: {fileID: 0}
+  scoredThisShot: 0
+  scoreBurst: {fileID: 0}
+  lastBallPosition: {x: 0, y: 0, z: 0}
+  hasLastBallPosition: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

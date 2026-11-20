@@ -1,10 +1,11 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(Rigidbody))]
 public class BallThrowController : MonoBehaviour
 {
-    private const float CourtResetDelay = 1f;
+    private const float CourtResetDelay = 2f;
 
     [Header("Aim")]
     [Tooltip("Camera used to decide the throw direction. If empty, Camera.main is used.")]
@@ -42,6 +43,9 @@ public class BallThrowController : MonoBehaviour
 
     [Tooltip("Delay after the ball stops before it is reset.")]
     public float resetDelay = 1f;
+
+    [Tooltip("How long a made basket is celebrated before the ball resets, so the player can see it drop through the net.")]
+    public float basketResetDelay = 1f;
 
     [Tooltip("The ball resets if it falls below this world Y position.")]
     public float fallResetHeight = -2f;
@@ -84,6 +88,8 @@ public class BallThrowController : MonoBehaviour
     public AudioClip backboardHitClip;
 
     [Range(0f, 1f)] public float ballAudioVolume = 0.8f;
+    [Tooltip("Random pitch range applied to impact sounds so repeated bounces do not sound identical.")]
+    [Range(0f, 0.3f)] public float impactPitchVariation = 0.09f;
     [Tooltip("Minimum collision speed needed to play an impact sound.")]
     public float minImpactSoundSpeed = 1f;
     [Tooltip("Minimum time between ball impact sounds.")]
@@ -94,6 +100,8 @@ public class BallThrowController : MonoBehaviour
     public Transform rimTarget;
     public Transform backboardTarget;
 
+    private const int BallAudioSourceCount = 4;
+
     private Rigidbody ballRb;
     private Vector3 startPosition;
     private Quaternion startRotation;
@@ -101,12 +109,20 @@ public class BallThrowController : MonoBehaviour
     private Vector2 dragCurrent;
     private Vector2 smoothedDrag;
     private bool isDragging;
+    private bool pointerWasHeldLastFrame;
     private bool ballInFlight;
     private float shotTime;
     private float stoppedTime;
     private float nextImpactSoundTime;
     private bool courtResetPending;
     private float courtResetTimer;
+    private bool basketResetPending;
+    private float basketResetTimer;
+    private bool scoredThisShot;
+    private int rimContactsThisShot;
+    private int backboardContactsThisShot;
+    private AudioSource[] ballAudioSources;
+    private int nextAudioSourceIndex;
 
     private Camera kickCamera;
     private Vector3 baseCameraPosition;
@@ -118,6 +134,29 @@ public class BallThrowController : MonoBehaviour
     private float shotGlowTimer;
     private BasketballTrail ballTrail;
     private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+
+    public bool IsInFlight => ballInFlight;
+
+    public bool HadRimOrBackboardContactThisShot => rimContactsThisShot > 0 || backboardContactsThisShot > 0;
+
+    public event Action<bool> ShotEnded;
+
+    public float CurrentPowerNormalized
+    {
+        get
+        {
+            if (!isDragging || ballInFlight || !canThrow)
+            {
+                return 0f;
+            }
+
+            return CalculatePowerNormalized((dragCurrent - dragStart).y);
+        }
+    }
+
+    private float DragResolutionScale => Mathf.Max(0.25f, Screen.height / Mathf.Max(1f, referenceScreenHeight));
+    private float ScaledMaxDragDistance => Mathf.Max(1f, maxDragDistance * DragResolutionScale);
+    private float ScaledMinUpwardDrag => Mathf.Max(1f, minUpwardDrag * DragResolutionScale);
 
     private void Awake()
     {
@@ -188,25 +227,6 @@ public class BallThrowController : MonoBehaviour
         SetupAudio();
     }
 
-    public bool IsInFlight => ballInFlight;
-
-    public float CurrentPowerNormalized
-    {
-        get
-        {
-            if (!isDragging || ballInFlight || !canThrow)
-            {
-                return 0f;
-            }
-
-            return CalculatePowerNormalized((dragCurrent - dragStart).y);
-        }
-    }
-
-    private float DragResolutionScale => Mathf.Max(0.25f, Screen.height / Mathf.Max(1f, referenceScreenHeight));
-    private float ScaledMaxDragDistance => Mathf.Max(1f, maxDragDistance * DragResolutionScale);
-    private float ScaledMinUpwardDrag => Mathf.Max(1f, minUpwardDrag * DragResolutionScale);
-
     private float CalculatePowerNormalized(float upwardDrag)
     {
         float powerAmount = Mathf.Clamp01(upwardDrag / ScaledMaxDragDistance);
@@ -221,6 +241,15 @@ public class BallThrowController : MonoBehaviour
         }
     }
 
+    public void CancelAim()
+    {
+        isDragging = false;
+        pointerWasHeldLastFrame = false;
+        dragStart = Vector2.zero;
+        dragCurrent = Vector2.zero;
+        smoothedDrag = Vector2.zero;
+    }
+
     public void RestartBall()
     {
         ResetBall();
@@ -232,6 +261,13 @@ public class BallThrowController : MonoBehaviour
         ClearShotGlow();
         StopCameraKick();
         canThrow = true;
+    }
+
+    public void OnBasketScored()
+    {
+        scoredThisShot = true;
+        basketResetPending = true;
+        basketResetTimer = 0f;
     }
 
     private void Update()
@@ -272,10 +308,14 @@ public class BallThrowController : MonoBehaviour
     {
         if (!TryReadPointer(out Vector2 pointerPosition, out bool pressed, out bool held, out bool released))
         {
+            pointerWasHeldLastFrame = false;
             return;
         }
 
-        if (pressed)
+        bool justPressed = pressed || (held && !pointerWasHeldLastFrame);
+        pointerWasHeldLastFrame = held;
+
+        if (justPressed)
         {
             isDragging = true;
             dragStart = pointerPosition;
@@ -287,7 +327,7 @@ public class BallThrowController : MonoBehaviour
             dragCurrent = pointerPosition;
             SmoothAimDrag(Time.deltaTime);
         }
-        else if (isDragging && released)
+        else if (isDragging && (released || !held))
         {
             dragCurrent = pointerPosition;
             SmoothAimDrag(0.05f);
@@ -372,7 +412,7 @@ public class BallThrowController : MonoBehaviour
         float power = Mathf.Lerp(minPower, maxPower, powerAmount);
 
         ballRb.isKinematic = false;
-        ballRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        ballRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
         ballRb.linearVelocity = throwDirection * power;
 
         ballInFlight = true;
@@ -380,6 +420,11 @@ public class BallThrowController : MonoBehaviour
         stoppedTime = 0f;
         courtResetPending = false;
         courtResetTimer = 0f;
+        basketResetPending = false;
+        basketResetTimer = 0f;
+        scoredThisShot = false;
+        rimContactsThisShot = 0;
+        backboardContactsThisShot = 0;
 
         StartReleaseFeedback();
     }
@@ -391,6 +436,18 @@ public class BallThrowController : MonoBehaviour
         if (transform.position.y < fallResetHeight)
         {
             ResetBall();
+            return;
+        }
+
+        if (basketResetPending)
+        {
+            basketResetTimer += Time.deltaTime;
+
+            if (basketResetTimer >= basketResetDelay)
+            {
+                ResetBall();
+            }
+
             return;
         }
 
@@ -426,6 +483,9 @@ public class BallThrowController : MonoBehaviour
 
     private void ResetBall()
     {
+        bool wasInFlight = ballInFlight;
+        bool wasScored = scoredThisShot;
+
         ballRb.isKinematic = false;
         ballRb.linearVelocity = Vector3.zero;
         ballRb.angularVelocity = Vector3.zero;
@@ -436,10 +496,16 @@ public class BallThrowController : MonoBehaviour
 
         ballInFlight = false;
         isDragging = false;
+        pointerWasHeldLastFrame = false;
         smoothedDrag = Vector2.zero;
         nextImpactSoundTime = 0f;
         courtResetPending = false;
         courtResetTimer = 0f;
+        basketResetPending = false;
+        basketResetTimer = 0f;
+        scoredThisShot = false;
+        rimContactsThisShot = 0;
+        backboardContactsThisShot = 0;
         ClearShotGlow();
 
         if (ballTrail != null)
@@ -447,9 +513,11 @@ public class BallThrowController : MonoBehaviour
             ballTrail.ClearTrail();
         }
 
-        if (ballAudioSource != null)
+        StopBallSounds();
+
+        if (wasInFlight)
         {
-            ballAudioSource.Stop();
+            ShotEnded?.Invoke(wasScored);
         }
     }
 
@@ -466,7 +534,8 @@ public class BallThrowController : MonoBehaviour
             shotGlowTimer = shotGlowDuration;
         }
 
-        PlayBallSound(shotReleaseClip, 0.65f);
+        Haptics.Light();
+        PlayBallSound(shotReleaseClip, 0.65f, 1f);
     }
 
     private void UpdateCameraKick()
@@ -539,20 +608,47 @@ public class BallThrowController : MonoBehaviour
 
     private void SetupAudio()
     {
-        if (ballAudioSource == null)
+        if (ballAudioSources == null)
         {
-            ballAudioSource = GetComponent<AudioSource>();
+            ballAudioSources = new AudioSource[BallAudioSourceCount];
+
+            for (int i = 0; i < BallAudioSourceCount; i++)
+            {
+                AudioSource source;
+
+                if (i == 0)
+                {
+                    source = ballAudioSource;
+                    if (source == null)
+                    {
+                        source = GetComponent<AudioSource>();
+                    }
+
+                    if (source == null)
+                    {
+                        source = gameObject.AddComponent<AudioSource>();
+                    }
+                }
+                else
+                {
+                    source = gameObject.AddComponent<AudioSource>();
+                }
+
+                source.playOnAwake = false;
+                source.loop = false;
+                source.spatialBlend = 1f;
+                source.dopplerLevel = 0.15f;
+                source.rolloffMode = AudioRolloffMode.Logarithmic;
+                source.minDistance = 2f;
+                source.maxDistance = 30f;
+                source.volume = 1f;
+                source.pitch = 1f;
+
+                ballAudioSources[i] = source;
+            }
         }
 
-        if (ballAudioSource == null)
-        {
-            ballAudioSource = gameObject.AddComponent<AudioSource>();
-        }
-
-        ballAudioSource.playOnAwake = false;
-        ballAudioSource.loop = false;
-        ballAudioSource.spatialBlend = 0f;
-        ballAudioSource.volume = 1f;
+        ballAudioSource = ballAudioSources[0];
 
         if (shotReleaseClip == null) shotReleaseClip = Resources.Load<AudioClip>("Audio/ShotRelease");
         if (courtBounceClip == null) courtBounceClip = Resources.Load<AudioClip>("Audio/CourtBounce");
@@ -578,14 +674,39 @@ public class BallThrowController : MonoBehaviour
         }
     }
 
-    private void PlayBallSound(AudioClip clip, float volume)
+    private void PlayBallSound(AudioClip clip, float volume, float pitch)
     {
-        if (clip == null || ballAudioSource == null)
+        if (clip == null || ballAudioSources == null || ballAudioSources.Length == 0)
         {
             return;
         }
 
-        ballAudioSource.PlayOneShot(clip, Mathf.Clamp01(volume * ballAudioVolume));
+        AudioSource source = ballAudioSources[nextAudioSourceIndex];
+        nextAudioSourceIndex = (nextAudioSourceIndex + 1) % ballAudioSources.Length;
+
+        if (source == null)
+        {
+            return;
+        }
+
+        source.pitch = Mathf.Clamp(pitch, 0.5f, 2f);
+        source.PlayOneShot(clip, Mathf.Clamp01(volume * ballAudioVolume));
+    }
+
+    private void StopBallSounds()
+    {
+        if (ballAudioSources == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < ballAudioSources.Length; i++)
+        {
+            if (ballAudioSources[i] != null)
+            {
+                ballAudioSources[i].Stop();
+            }
+        }
     }
 
     private void OnCollisionEnter(Collision collision)
@@ -596,13 +717,39 @@ public class BallThrowController : MonoBehaviour
         }
 
         GameObject hitObject = collision.collider.gameObject;
+        bool hitCourt = courtTarget != null && hitObject == courtTarget.gameObject;
+        bool hitRim = rimTarget != null && hitObject == rimTarget.gameObject;
+        bool hitBackboard = backboardTarget != null && hitObject == backboardTarget.gameObject;
 
-        if (courtTarget != null && hitObject == courtTarget.gameObject)
+        if (hitRim)
+        {
+            rimContactsThisShot++;
+        }
+
+        if (hitBackboard)
+        {
+            backboardContactsThisShot++;
+        }
+
+        if (hitCourt)
         {
             StartCourtResetCountdown();
         }
 
         float speed = collision.relativeVelocity.magnitude;
+
+        if (speed >= 0.8f)
+        {
+            if (hitRim)
+            {
+                Haptics.Medium();
+            }
+            else if (hitBackboard)
+            {
+                Haptics.Light();
+            }
+        }
+
         if (speed < minImpactSoundSpeed || Time.time < nextImpactSoundTime)
         {
             return;
@@ -610,15 +757,15 @@ public class BallThrowController : MonoBehaviour
 
         AudioClip clip = null;
 
-        if (courtTarget != null && hitObject == courtTarget.gameObject)
+        if (hitCourt)
         {
             clip = courtBounceClip;
         }
-        else if (rimTarget != null && hitObject == rimTarget.gameObject)
+        else if (hitRim)
         {
             clip = rimHitClip;
         }
-        else if (backboardTarget != null && hitObject == backboardTarget.gameObject)
+        else if (hitBackboard)
         {
             clip = backboardHitClip;
         }
@@ -629,7 +776,9 @@ public class BallThrowController : MonoBehaviour
         }
 
         float impact = Mathf.InverseLerp(minImpactSoundSpeed, 10f, speed);
-        PlayBallSound(clip, Mathf.Lerp(0.35f, 0.85f, impact));
+        float pitchVariation = Mathf.Max(0f, impactPitchVariation);
+        float pitch = UnityEngine.Random.Range(1f - pitchVariation, 1f + pitchVariation);
+        PlayBallSound(clip, Mathf.Lerp(0.35f, 0.85f, impact), pitch);
         nextImpactSoundTime = Time.time + Mathf.Max(0.02f, impactSoundCooldown);
     }
 

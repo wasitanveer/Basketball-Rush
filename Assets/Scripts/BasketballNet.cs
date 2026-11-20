@@ -22,7 +22,6 @@ public class BasketballNet : MonoBehaviour
 
     void Start()
     {
-        // Remove a net that was built before, so we never get two nets.
         Transform oldNet = transform.Find("Net");
         if (oldNet != null)
         {
@@ -65,7 +64,6 @@ public class BasketballNet : MonoBehaviour
         ropeCount = Mathf.Max(3, ropeCount);
         rows = Mathf.Max(1, rows);
 
-        // Every rope piece is a child of this "Net" object.
         GameObject net = new GameObject("Net");
         net.transform.SetParent(transform, false);
         netRoot = net.transform;
@@ -74,7 +72,6 @@ public class BasketballNet : MonoBehaviour
         CreateStrands(net.transform);
     }
 
-    // Horizontal rope circles that connect the strands.
     void CreateRings(Transform net)
     {
         for (int row = 0; row <= rows; row++)
@@ -90,7 +87,6 @@ public class BasketballNet : MonoBehaviour
         }
     }
 
-    // Diagonal strands that cross each other and form the diamond pattern.
     void CreateStrands(Transform net)
     {
         for (int start = 0; start < ropeCount; start++)
@@ -118,7 +114,6 @@ public class BasketballNet : MonoBehaviour
         return points;
     }
 
-    // A point on the net. The top is wide and the bottom is narrow.
     Vector3 GetPoint(int row, int column)
     {
         float t = (float)row / rows;
