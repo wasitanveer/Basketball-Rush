@@ -9,6 +9,8 @@ public class NPCSpawner : MonoBehaviour
     public List<Transform> spawnPoints = new List<Transform>();
     [Min(0)] public int npcCount = 5;
     public float spawnRadius = 1.25f;
+    public float minDistanceFromPlayer = 3f;
+    public float minDistanceBetweenNPCs = 1.5f;
     public Vector2 moveSpeedRange = new Vector2(1.1f, 1.7f);
     public bool ignoreNpcCollisions = true;
 
@@ -26,11 +28,16 @@ public class NPCSpawner : MonoBehaviour
 
         if (npcPrefab == null || spawnPoints.Count == 0 || npcCount <= 0) return;
 
+        Transform player = GameObject.Find("Player")?.transform;
         Transform parent = npcParent != null ? npcParent : transform;
+        List<Transform> shuffledSpawns = new List<Transform>(spawnPoints);
+        Shuffle(shuffledSpawns);
+        List<Vector3> placedPositions = new List<Vector3>(npcCount);
+
         for (int i = 0; i < npcCount; i++)
         {
-            Transform spawn = spawnPoints[i % spawnPoints.Count];
-            if (!TryFindSpawnPosition(spawn.position, out Vector3 position)) continue;
+            Transform spawn = shuffledSpawns[i % shuffledSpawns.Count];
+            if (!TryFindSpawnPosition(spawn.position, player, placedPositions, out Vector3 position)) continue;
 
             GameObject npc = Instantiate(npcPrefab, position, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f), parent);
             npc.name = npcPrefab.name + "_" + (i + 1).ToString("00");
@@ -43,6 +50,7 @@ public class NPCSpawner : MonoBehaviour
             }
 
             spawnedNpcs.Add(npc);
+            placedPositions.Add(position);
         }
 
         if (ignoreNpcCollisions) IgnoreSpawnedCollisions();
@@ -66,9 +74,9 @@ public class NPCSpawner : MonoBehaviour
         }
     }
 
-    bool TryFindSpawnPosition(Vector3 origin, out Vector3 position)
+    bool TryFindSpawnPosition(Vector3 origin, Transform player, List<Vector3> placedPositions, out Vector3 position)
     {
-        for (int attempt = 0; attempt < 12; attempt++)
+        for (int attempt = 0; attempt < 24; attempt++)
         {
             Vector2 offset = Random.insideUnitCircle * spawnRadius;
             Vector3 candidate = origin + new Vector3(offset.x, 0f, offset.y);
@@ -80,14 +88,35 @@ public class NPCSpawner : MonoBehaviour
             }
 
             candidate.y = hit.point.y + 0.1f;
-            if (IsSpawnClear(candidate))
-            {
-                position = candidate;
-                return true;
-            }
+            if (IsTooCloseToPlayer(candidate, player)) continue;
+            if (IsTooCloseToNpc(candidate, placedPositions)) continue;
+            if (!IsSpawnClear(candidate)) continue;
+
+            position = candidate;
+            return true;
         }
 
         position = origin;
+        return false;
+    }
+
+    bool IsTooCloseToPlayer(Vector3 position, Transform player)
+    {
+        if (player == null) return false;
+        Vector3 offset = position - player.position;
+        offset.y = 0f;
+        return offset.sqrMagnitude < minDistanceFromPlayer * minDistanceFromPlayer;
+    }
+
+    bool IsTooCloseToNpc(Vector3 position, List<Vector3> placedPositions)
+    {
+        float minSqr = minDistanceBetweenNPCs * minDistanceBetweenNPCs;
+        for (int i = 0; i < placedPositions.Count; i++)
+        {
+            Vector3 offset = position - placedPositions[i];
+            offset.y = 0f;
+            if (offset.sqrMagnitude < minSqr) return true;
+        }
         return false;
     }
 
@@ -96,6 +125,17 @@ public class NPCSpawner : MonoBehaviour
         Vector3 bottom = position + Vector3.up * 0.45f;
         Vector3 top = position + Vector3.up * 1.35f;
         return !Physics.CheckCapsule(bottom, top, 0.3f, ~0, QueryTriggerInteraction.Ignore);
+    }
+
+    static void Shuffle(List<Transform> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            Transform temp = list[i];
+            list[i] = list[j];
+            list[j] = temp;
+        }
     }
 
     void IgnoreSpawnedCollisions()

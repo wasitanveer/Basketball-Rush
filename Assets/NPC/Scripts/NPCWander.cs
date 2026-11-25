@@ -1,5 +1,13 @@
 using UnityEngine;
 
+public enum NPCState
+{
+    Idle,
+    Walking,
+    Waiting,
+    Paused
+}
+
 [RequireComponent(typeof(CharacterController))]
 public class NPCWander : MonoBehaviour
 {
@@ -8,8 +16,14 @@ public class NPCWander : MonoBehaviour
     public float rotationSpeed = 180f;
     public float stoppingDistance = 0.4f;
     public float waitTimeAtWaypoint = 1.5f;
+    public float idleTimeMin = 0.4f;
+    public float idleTimeMax = 1.2f;
+    public float minWaypointDistance = 4f;
     public float gravity = -18f;
     public float stuckTimeout = 1.8f;
+
+    public NPCState State { get; private set; } = NPCState.Idle;
+    public bool IsPaused => State == NPCState.Paused;
 
     CharacterController controller;
     NPCWaypoint currentWaypoint;
@@ -17,8 +31,10 @@ public class NPCWander : MonoBehaviour
     Vector3 targetPosition;
     Vector3 lastStuckPosition;
     float verticalVelocity;
+    float idleTimer;
     float waitTimer;
     float stuckTimer;
+    NPCState stateBeforePause = NPCState.Idle;
 
     void Awake()
     {
@@ -30,12 +46,15 @@ public class NPCWander : MonoBehaviour
     {
         if (waypointGroup == null) waypointGroup = FindAnyObjectByType<NPCWaypointGroup>();
         ConfigureCollisionIgnores();
-        PickNextWaypoint();
+        idleTimer = Random.Range(idleTimeMin, idleTimeMax);
+        State = NPCState.Idle;
+        RefreshGameState();
     }
 
     void Update()
     {
-        if (controller == null) return;
+        RefreshGameState();
+        if (State == NPCState.Paused) return;
 
         float dt = Time.deltaTime;
         if (dt <= 0f) return;
@@ -43,23 +62,55 @@ public class NPCWander : MonoBehaviour
         if (controller.isGrounded && verticalVelocity < 0f) verticalVelocity = -2f;
         verticalVelocity += gravity * dt;
 
-        if (currentWaypoint == null)
+        switch (State)
         {
-            if (waitTimer > 0f)
-            {
+            case NPCState.Idle:
+                idleTimer -= dt;
+                MoveWithGravity(Vector3.zero, dt);
+                if (idleTimer <= 0f) PickNextWaypoint();
+                break;
+
+            case NPCState.Waiting:
                 waitTimer -= dt;
                 MoveWithGravity(Vector3.zero, dt);
-                return;
-            }
+                if (waitTimer <= 0f) EnterIdle();
+                break;
 
-            PickNextWaypoint();
-            if (currentWaypoint == null)
-            {
-                MoveWithGravity(Vector3.zero, dt);
-                return;
-            }
+            case NPCState.Walking:
+                UpdateWalking(dt);
+                break;
+        }
+    }
+
+    public void SetPaused(bool paused)
+    {
+        if (paused)
+        {
+            if (State == NPCState.Paused) return;
+            stateBeforePause = State;
+            State = NPCState.Paused;
+            return;
         }
 
+        if (State != NPCState.Paused) return;
+        State = stateBeforePause == NPCState.Paused ? NPCState.Idle : stateBeforePause;
+    }
+
+    void RefreshGameState()
+    {
+        SetPaused(!CanMoveForCurrentGameState());
+    }
+
+    static bool CanMoveForCurrentGameState()
+    {
+        GameHUD hud = GameHUD.Instance;
+        if (hud == null) return false;
+        if (!hud.HasGameStarted || hud.IsCountdownActive || hud.IsTimerFinished) return false;
+        return Time.timeScale > 0.0001f;
+    }
+
+    void UpdateWalking(float dt)
+    {
         Vector3 toTarget = targetPosition - transform.position;
         toTarget.y = 0f;
         float distance = toTarget.magnitude;
@@ -68,6 +119,7 @@ public class NPCWander : MonoBehaviour
         {
             previousWaypoint = currentWaypoint;
             currentWaypoint = null;
+            State = NPCState.Waiting;
             waitTimer = waitTimeAtWaypoint;
             stuckTimer = 0f;
             MoveWithGravity(Vector3.zero, dt);
@@ -101,8 +153,8 @@ public class NPCWander : MonoBehaviour
             {
                 previousWaypoint = currentWaypoint;
                 currentWaypoint = null;
-                waitTimer = 0f;
                 stuckTimer = 0f;
+                EnterIdle();
             }
         }
         else
@@ -112,18 +164,33 @@ public class NPCWander : MonoBehaviour
         }
     }
 
+    void EnterIdle()
+    {
+        State = NPCState.Idle;
+        idleTimer = Random.Range(idleTimeMin, idleTimeMax);
+    }
+
     void PickNextWaypoint()
     {
-        if (waypointGroup == null) return;
+        if (waypointGroup == null)
+        {
+            EnterIdle();
+            return;
+        }
 
-        NPCWaypoint next = waypointGroup.GetRandomWaypoint(previousWaypoint);
-        if (next == null) return;
+        NPCWaypoint next = waypointGroup.GetRandomWaypoint(previousWaypoint, transform.position, minWaypointDistance);
+        if (next == null)
+        {
+            EnterIdle();
+            return;
+        }
 
         currentWaypoint = next;
         targetPosition = next.transform.position;
         lastStuckPosition = transform.position;
         stuckTimer = 0f;
         waitTimer = 0f;
+        State = NPCState.Walking;
     }
 
     void ConfigureCollisionIgnores()

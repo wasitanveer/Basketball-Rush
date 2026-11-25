@@ -21592,6 +21592,8 @@ MonoBehaviour:
   - {fileID: 269733702}
   npcCount: 5
   spawnRadius: 1.25
+  minDistanceFromPlayer: 3
+  minDistanceBetweenNPCs: 1.5
   moveSpeedRange: {x: 1.1, y: 1.7}
   ignoreNpcCollisions: 1
 --- !u!205 &1708687073

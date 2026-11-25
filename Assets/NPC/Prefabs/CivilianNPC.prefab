@@ -281,6 +281,7 @@ GameObject:
   - component: {fileID: 277294189713121418}
   - component: {fileID: 6874754124177627225}
   - component: {fileID: 8934400713824355545}
+  - component: {fileID: 3660345518343029316}
   m_Layer: 0
   m_Name: CivilianNPC
   m_TagString: Untagged
@@ -349,8 +350,23 @@ MonoBehaviour:
   rotationSpeed: 180
   stoppingDistance: 0.4
   waitTimeAtWaypoint: 1.5
+  idleTimeMin: 0.4
+  idleTimeMax: 1.2
+  minWaypointDistance: 4
   gravity: -18
   stuckTimeout: 1.8
+--- !u!114 &3660345518343029316
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5406315966264696792}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f496ff6d51f12524d8a116f92de3efa9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NPCAppearance
 --- !u!1 &7568217409028135282
 GameObject:
   m_ObjectHideFlags: 0
