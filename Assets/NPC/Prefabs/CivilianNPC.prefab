@@ -282,6 +282,7 @@ GameObject:
   - component: {fileID: 6874754124177627225}
   - component: {fileID: 8934400713824355545}
   - component: {fileID: 3660345518343029316}
+  - component: {fileID: 8230493541860156906}
   m_Layer: 0
   m_Name: CivilianNPC
   m_TagString: Untagged
@@ -353,6 +354,11 @@ MonoBehaviour:
   idleTimeMin: 0.4
   idleTimeMax: 1.2
   minWaypointDistance: 4
+  playerDetectionRadius: 5
+  playerLookSpeed: 300
+  playerReactionDuration: 1.5
+  separationRadius: 1.25
+  separationStrength: 0.8
   gravity: -18
   stuckTimeout: 1.8
 --- !u!114 &3660345518343029316
@@ -367,6 +373,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f496ff6d51f12524d8a116f92de3efa9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NPCAppearance
+--- !u!114 &8230493541860156906
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5406315966264696792}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96fc6d343e41bc94b8edd56c08297188, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NPCInteraction
+  lines:
+  - Hey!
+  - Nice shot!
+  - What's up?
+  - Good game!
 --- !u!1 &7568217409028135282
 GameObject:
   m_ObjectHideFlags: 0
