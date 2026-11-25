@@ -608,7 +608,7 @@ public class BallThrowController : MonoBehaviour
 
     private void SetupAudio()
     {
-        if (ballAudioSources == null)
+        if (ballAudioSources == null || ballAudioSources.Length != BallAudioSourceCount)
         {
             ballAudioSources = new AudioSource[BallAudioSourceCount];
 
