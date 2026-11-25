@@ -2,6 +2,14 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+public enum BasketballState
+{
+    Free,
+    Controlled,
+    Charging,
+    InFlight
+}
+
 [RequireComponent(typeof(Rigidbody))]
 public class BallThrowController : MonoBehaviour
 {
@@ -24,8 +32,18 @@ public class BallThrowController : MonoBehaviour
     public float referenceScreenHeight = 1080f;
 
     [Header("Input")]
-    [Tooltip("When unchecked, the player cannot start a new throw. In-flight shots still finish and reset.")]
+    [Tooltip("When unchecked, the player cannot control or shoot the ball. In-flight shots still finish and reset.")]
     public bool canThrow = true;
+
+    [Header("Ball Control")]
+    [Tooltip("Maximum distance at which the player can pick up the ball.")]
+    public float ballPickupRadius = 2f;
+
+    [Tooltip("Seconds of holding R required to reach maximum shot power.")]
+    public float maxChargeTime = 1.2f;
+
+    [Tooltip("Optional point where a controlled ball is held. Found by name if empty.")]
+    public Transform ballControlPoint;
 
     [Header("Throw Power")]
     [Tooltip("Throw speed for the smallest valid upward drag.")]
@@ -134,7 +152,12 @@ public class BallThrowController : MonoBehaviour
     private float shotGlowTimer;
     private BasketballTrail ballTrail;
     private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+    private Transform playerTransform;
+    private Collider ballCollider;
+    private float chargeNormalized;
 
+    public BasketballState State { get; private set; } = BasketballState.Free;
+    public bool IsCharging => State == BasketballState.Charging;
     public bool IsInFlight => ballInFlight;
 
     public bool HadRimOrBackboardContactThisShot => rimContactsThisShot > 0 || backboardContactsThisShot > 0;
@@ -145,12 +168,12 @@ public class BallThrowController : MonoBehaviour
     {
         get
         {
-            if (!isDragging || ballInFlight || !canThrow)
+            if (State != BasketballState.Charging || ballInFlight || !canThrow)
             {
                 return 0f;
             }
 
-            return CalculatePowerNormalized((dragCurrent - dragStart).y);
+            return Mathf.Clamp01(chargeNormalized);
         }
     }
 
@@ -161,6 +184,19 @@ public class BallThrowController : MonoBehaviour
     private void Awake()
     {
         ballRb = GetComponent<Rigidbody>();
+        ballCollider = GetComponent<Collider>();
+        playerTransform = GameObject.Find("Player")?.transform;
+        if (ballControlPoint == null)
+        {
+            GameObject controlPointObject = GameObject.Find("BallControlPoint");
+            if (controlPointObject != null) ballControlPoint = controlPointObject.transform;
+        }
+
+        if (ballCollider != null && playerTransform != null)
+        {
+            Collider playerCollider = playerTransform.GetComponent<Collider>();
+            if (playerCollider != null) Physics.IgnoreCollision(ballCollider, playerCollider, true);
+        }
 
         startPosition = transform.position;
         startRotation = transform.rotation;
@@ -175,7 +211,6 @@ public class BallThrowController : MonoBehaviour
         ballRb.isKinematic = true;
         ballRb.useGravity = true;
 
-        Collider ballCollider = GetComponent<Collider>();
         if (ballCollider != null)
         {
             if (ballPhysicsMaterial == null)
@@ -225,6 +260,9 @@ public class BallThrowController : MonoBehaviour
         }
 
         SetupAudio();
+        ballRb.isKinematic = false;
+        ballRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        State = BasketballState.Free;
     }
 
     private float CalculatePowerNormalized(float upwardDrag)
@@ -243,11 +281,11 @@ public class BallThrowController : MonoBehaviour
 
     public void CancelAim()
     {
-        isDragging = false;
-        pointerWasHeldLastFrame = false;
-        dragStart = Vector2.zero;
-        dragCurrent = Vector2.zero;
-        smoothedDrag = Vector2.zero;
+        if (State == BasketballState.Charging)
+        {
+            chargeNormalized = 0f;
+            State = BasketballState.Controlled;
+        }
     }
 
     public void RestartBall()
@@ -255,9 +293,8 @@ public class BallThrowController : MonoBehaviour
         ResetBall();
         shotTime = 0f;
         stoppedTime = 0f;
-        dragStart = Vector2.zero;
-        dragCurrent = Vector2.zero;
-        smoothedDrag = Vector2.zero;
+        chargeNormalized = 0f;
+        State = BasketballState.Free;
         ClearShotGlow();
         StopCameraKick();
         canThrow = true;
@@ -276,13 +313,9 @@ public class BallThrowController : MonoBehaviour
         {
             UpdateFlight();
         }
-        else if (canThrow)
-        {
-            UpdateAim();
-        }
         else
         {
-            isDragging = false;
+            UpdateKeyboardControl(Keyboard.current);
         }
 
         UpdateTrailVisibility();
@@ -429,6 +462,138 @@ public class BallThrowController : MonoBehaviour
         StartReleaseFeedback();
     }
 
+    private void UpdateKeyboardControl(Keyboard keyboard)
+    {
+        if (State == BasketballState.Free)
+        {
+            if (canThrow && keyboard != null && keyboard.fKey.wasPressedThisFrame) TryPickupBall();
+            return;
+        }
+
+        if (State != BasketballState.Controlled && State != BasketballState.Charging) return;
+
+        PositionControlledBall();
+
+        if (!canThrow)
+        {
+            if (State == BasketballState.Charging) CancelAim();
+            return;
+        }
+
+        if (keyboard == null) return;
+
+        if (keyboard.fKey.wasPressedThisFrame)
+        {
+            DropBall();
+            return;
+        }
+
+        if (State == BasketballState.Controlled)
+        {
+            if (keyboard.rKey.wasPressedThisFrame) BeginCharge();
+            return;
+        }
+
+        chargeNormalized = Mathf.Clamp01(chargeNormalized + Time.deltaTime / Mathf.Max(0.01f, maxChargeTime));
+        if (keyboard.rKey.wasReleasedThisFrame || !keyboard.rKey.isPressed) ShootBall();
+    }
+
+    private bool CanPickupBall()
+    {
+        if (!canThrow || State != BasketballState.Free || ballInFlight || playerTransform == null) return false;
+
+        Vector3 offset = transform.position - playerTransform.position;
+        offset.y = 0f;
+        return offset.sqrMagnitude <= ballPickupRadius * ballPickupRadius;
+    }
+
+    private void TryPickupBall()
+    {
+        if (!CanPickupBall()) return;
+
+        State = BasketballState.Controlled;
+        chargeNormalized = 0f;
+        ballRb.isKinematic = true;
+        ballRb.linearVelocity = Vector3.zero;
+        ballRb.angularVelocity = Vector3.zero;
+        ballRb.collisionDetectionMode = CollisionDetectionMode.Discrete;
+        PositionControlledBall();
+    }
+
+    private void DropBall()
+    {
+        if (State != BasketballState.Controlled && State != BasketballState.Charging) return;
+
+        State = BasketballState.Free;
+        chargeNormalized = 0f;
+        ballRb.isKinematic = false;
+        ballRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        ballRb.linearVelocity = Vector3.zero;
+        ballRb.angularVelocity = Vector3.zero;
+        ballRb.useGravity = true;
+    }
+
+    private void BeginCharge()
+    {
+        if (State != BasketballState.Controlled || !canThrow) return;
+        chargeNormalized = 0f;
+        State = BasketballState.Charging;
+    }
+
+    private void ShootBall()
+    {
+        if (State != BasketballState.Charging || aimCamera == null) return;
+
+        PositionControlledBall();
+
+        float powerAmount = Mathf.Pow(Mathf.Clamp01(chargeNormalized), Mathf.Max(0.01f, powerCurveExponent));
+        Quaternion aimRotation = aimCamera.transform.rotation * Quaternion.Euler(-launchAngle, 0f, 0f);
+        Vector3 throwDirection = aimRotation * Vector3.forward;
+        float power = Mathf.Lerp(minPower, maxPower, powerAmount);
+
+        ballRb.isKinematic = false;
+        ballRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        ballRb.useGravity = true;
+        ballRb.linearVelocity = throwDirection * power;
+
+        Vector3 spinAxis = Vector3.Cross(Vector3.up, throwDirection);
+        if (spinAxis.sqrMagnitude > 0.0001f)
+        {
+            ballRb.angularVelocity = spinAxis.normalized * -4f;
+        }
+
+        ballInFlight = true;
+        State = BasketballState.InFlight;
+        chargeNormalized = 0f;
+        shotTime = 0f;
+        stoppedTime = 0f;
+        courtResetPending = false;
+        courtResetTimer = 0f;
+        basketResetPending = false;
+        basketResetTimer = 0f;
+        scoredThisShot = false;
+        rimContactsThisShot = 0;
+        backboardContactsThisShot = 0;
+
+        StartReleaseFeedback();
+    }
+
+    private void PositionControlledBall()
+    {
+        Vector3 position = GetControlledBallPosition();
+        transform.position = position;
+    }
+
+    private Vector3 GetControlledBallPosition()
+    {
+        if (ballControlPoint != null) return ballControlPoint.position;
+        if (aimCamera != null)
+        {
+            return aimCamera.transform.position + aimCamera.transform.forward * 0.45f - aimCamera.transform.up * 0.15f;
+        }
+        return transform.position;
+    }
+
     private void UpdateFlight()
     {
         shotTime += Time.deltaTime;
@@ -486,15 +651,17 @@ public class BallThrowController : MonoBehaviour
         bool wasInFlight = ballInFlight;
         bool wasScored = scoredThisShot;
 
-        ballRb.isKinematic = false;
         ballRb.linearVelocity = Vector3.zero;
         ballRb.angularVelocity = Vector3.zero;
-        ballRb.collisionDetectionMode = CollisionDetectionMode.Discrete;
-        ballRb.isKinematic = true;
+        ballRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        ballRb.isKinematic = false;
+        ballRb.useGravity = true;
 
         transform.SetPositionAndRotation(startPosition, startRotation);
 
         ballInFlight = false;
+        State = BasketballState.Free;
+        chargeNormalized = 0f;
         isDragging = false;
         pointerWasHeldLastFrame = false;
         smoothedDrag = Vector2.zero;
@@ -608,7 +775,7 @@ public class BallThrowController : MonoBehaviour
 
     private void SetupAudio()
     {
-        if (ballAudioSources == null)
+        if (ballAudioSources == null || ballAudioSources.Length != BallAudioSourceCount)
         {
             ballAudioSources = new AudioSource[BallAudioSourceCount];
 

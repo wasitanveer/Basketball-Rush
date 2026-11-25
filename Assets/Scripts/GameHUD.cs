@@ -268,6 +268,7 @@ public class GameHUD : MonoBehaviour
     {
         if (isPaused)
         {
+            SetPowerVisible(false);
             HandlePauseInput();
             HandleRestartKey();
             return;
@@ -276,6 +277,7 @@ public class GameHUD : MonoBehaviour
         UpdateCountdown();
         UpdateTimer();
         UpdateScoreLabel();
+        SetPowerVisible(ballThrowController != null && ballThrowController.IsCharging);
         UpdatePowerMeter();
         UpdateFeedback();
         UpdateStreakText();
@@ -320,7 +322,7 @@ public class GameHUD : MonoBehaviour
         SetPausePanelVisible(false);
         SetPauseButtonVisible(true);
         SetPanelsVisible(true);
-        SetPowerVisible(true);
+        SetPowerVisible(false);
 
         if (timerText != null)
         {
