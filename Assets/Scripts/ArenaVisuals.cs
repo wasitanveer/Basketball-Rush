@@ -42,6 +42,11 @@ public class ArenaVisuals : MonoBehaviour
             return;
         }
 
+        if (GameObject.Find("ArenaVisualsDisabled") != null)
+        {
+            return;
+        }
+
         GameObject arenaObject = new GameObject("ArenaVisuals");
         arenaObject.AddComponent<ArenaVisuals>();
     }
